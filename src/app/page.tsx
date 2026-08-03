@@ -53,6 +53,10 @@ export default function Home() {
     setExecutionLogs((prev) => [newLog, ...prev]);
   };
 
+  const handleBatchScheduleGenerated = (newJobs: QueueJob[]) => {
+    setQueueJobs((prev) => [...newJobs, ...prev]);
+  };
+
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-200">
       {/* Header */}
@@ -101,7 +105,12 @@ export default function Home() {
           {activeTab === 'ffmpeg_editor' && <VideoStudioView mediaAssets={mediaAssets} />}
 
           {activeTab === 'campaigns' && (
-            <CampaignsView accounts={accounts} selectedCategory={selectedCategory} />
+            <CampaignsView
+              accounts={accounts}
+              mediaAssets={mediaAssets}
+              selectedCategory={selectedCategory}
+              onScheduleGenerated={handleBatchScheduleGenerated}
+            />
           )}
 
           {activeTab === 'auto_publisher' && (

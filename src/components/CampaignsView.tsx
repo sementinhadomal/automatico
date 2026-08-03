@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Campaign, Account, CategoryType } from '@/types';
+import { Campaign, Account, CategoryType, MediaAsset, QueueJob } from '@/types';
 import { INITIAL_CAMPAIGNS } from '@/lib/mockData';
+import { BatchAutoSchedulerEngine, BatchScheduleResult } from '@/lib/scheduling/auto-scheduler';
 import {
   CalendarDays,
   Plus,
@@ -10,22 +11,69 @@ import {
   ShoppingBag,
   Clock,
   Globe2,
-  Users,
+  Sparkles,
+  Zap,
   CheckCircle2,
+  ListOrdered,
+  Shuffle,
+  Send,
 } from 'lucide-react';
 
 interface CampaignsViewProps {
   accounts: Account[];
+  mediaAssets: MediaAsset[];
   selectedCategory: CategoryType | 'ALL';
+  onScheduleGenerated?: (jobs: QueueJob[]) => void;
 }
 
-export const CampaignsView: React.FC<CampaignsViewProps> = ({ accounts, selectedCategory }) => {
+export const CampaignsView: React.FC<CampaignsViewProps> = ({
+  accounts,
+  mediaAssets,
+  selectedCategory,
+  onScheduleGenerated,
+}) => {
   const [campaigns, setCampaigns] = useState<Campaign[]>(INITIAL_CAMPAIGNS);
-  const [viewMode, setViewMode] = useState<'campaigns' | 'calendar'>('campaigns');
+  const [viewMode, setViewMode] = useState<'auto_50days' | 'campaigns' | 'calendar'>('auto_50days');
+
+  // Auto-Scheduler Parameters
+  const [daysCount, setDaysCount] = useState<number>(50);
+  const [postsPerDay, setPostsPerDay] = useState<number>(3);
+  const [useTimeVariance, setUseTimeVariance] = useState<boolean>(true);
+  const [timeSlots, setTimeSlots] = useState<string>('09:00, 15:00, 21:00');
+  
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [scheduleResult, setScheduleResult] = useState<BatchScheduleResult | null>(null);
 
   const filteredCampaigns = campaigns.filter(
     (c) => selectedCategory === 'ALL' || c.category === selectedCategory
   );
+
+  const filteredAccounts = accounts.filter(
+    (a) => selectedCategory === 'ALL' || a.category === selectedCategory
+  );
+
+  const handleRun50DaysAutoSchedule = () => {
+    setIsGenerating(true);
+
+    setTimeout(() => {
+      const timesArray = timeSlots.split(',').map((t) => t.trim());
+      const res = BatchAutoSchedulerEngine.generateBatchSchedule(mediaAssets, accounts, {
+        daysCount,
+        postsPerDay,
+        targetAccountIds: filteredAccounts.map((a) => a.id),
+        scheduleTimes: timesArray,
+        category: selectedCategory,
+        randomizeTimeVarianceMinutes: useTimeVariance ? 8 : 0,
+      });
+
+      setScheduleResult(res);
+      setIsGenerating(false);
+
+      if (onScheduleGenerated) {
+        onScheduleGenerated(res.jobs);
+      }
+    }, 500);
+  };
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
@@ -34,15 +82,27 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({ accounts, selected
         <div>
           <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
             <CalendarDays className="w-5 h-5 text-purple-500" />
-            Campanhas & Agendamento por Fuso Horário
+            Agendamento Automático em Lote & Campanhas
           </h2>
           <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Programação de publicações automáticas com adequação ao horário local das contas (ex: 09:00 Nova York, 09:00 Lisboa, 09:00 São Paulo).
+            Programe 50 dias de posts automáticos para 150 mídias de forma totalmente autônoma e otimizada por fuso horário.
           </p>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-2 bg-[var(--bg-card)] p-1 rounded-xl border border-[var(--border-color)]">
+        {/* View Mode Switcher */}
+        <div className="flex items-center gap-1.5 bg-[var(--bg-card)] p-1 rounded-xl border border-[var(--border-color)]">
+          <button
+            onClick={() => setViewMode('auto_50days')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              viewMode === 'auto_50days'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Motor 50 Dias Auto
+          </button>
+
           <button
             onClick={() => setViewMode('campaigns')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -51,8 +111,9 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({ accounts, selected
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            Lista de Campanhas
+            Campanhas
           </button>
+
           <button
             onClick={() => setViewMode('calendar')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -61,12 +122,178 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({ accounts, selected
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            Agenda Geral
+            Agenda
           </button>
         </div>
       </div>
 
-      {viewMode === 'campaigns' ? (
+      {/* 50-Days Auto Scheduler Engine View */}
+      {viewMode === 'auto_50days' && (
+        <div className="space-y-6">
+          {/* Setup Panel */}
+          <div className="p-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+              <div>
+                <h3 className="font-bold text-sm text-[var(--text-primary)] flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  Gerador Automático de 50 Dias de Publicações (150 Mídias)
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Distribuição automática das mídias editadas nos horários de pico de cada país com rotação de copys e hashtags.
+                </p>
+              </div>
+
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                150 Mídias &bull; {filteredAccounts.length} Contas
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+              {/* Horizon Days */}
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-secondary)]">Horizonte (Dias)</label>
+                <input
+                  type="number"
+                  value={daysCount}
+                  onChange={(e) => setDaysCount(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs font-bold text-[var(--text-primary)]"
+                />
+              </div>
+
+              {/* Posts per Day */}
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-secondary)]">Posts por Dia (por Conta)</label>
+                <select
+                  value={postsPerDay}
+                  onChange={(e) => setPostsPerDay(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs font-bold text-[var(--text-primary)]"
+                >
+                  <option value={1}>1 Post / dia (50 Posts total)</option>
+                  <option value={2}>2 Posts / dia (100 Posts total)</option>
+                  <option value={3}>3 Posts / dia (150 Posts total)</option>
+                  <option value={4}>4 Posts / dia (200 Posts total)</option>
+                </select>
+              </div>
+
+              {/* Time Slots */}
+              <div className="space-y-1">
+                <label className="font-semibold text-[var(--text-secondary)]">Horários Locais Diários</label>
+                <input
+                  type="text"
+                  value={timeSlots}
+                  onChange={(e) => setTimeSlots(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)]"
+                />
+              </div>
+
+              {/* Variance Option */}
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  type="checkbox"
+                  id="variance"
+                  checked={useTimeVariance}
+                  onChange={(e) => setUseTimeVariance(e.target.checked)}
+                  className="w-4 h-4 accent-purple-500 rounded"
+                />
+                <label htmlFor="variance" className="text-xs font-semibold text-[var(--text-secondary)] cursor-pointer">
+                  Variação Orgânica (+/- 8 min)
+                </label>
+              </div>
+            </div>
+
+            {/* Run Button */}
+            <button
+              onClick={handleRun50DaysAutoSchedule}
+              disabled={isGenerating}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-extrabold text-xs shadow-xl shadow-purple-600/30 transition-all hover:scale-[1.01] flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Sparkles className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+              {isGenerating
+                ? 'Calculando e Enfileirando 50 Dias de Publicações...'
+                : `🚀 Gerar Agendamento Automático de ${daysCount} Dias (${daysCount * postsPerDay * filteredAccounts.length} Posts Totais)`}
+            </button>
+          </div>
+
+          {/* Schedule Result Overview */}
+          {scheduleResult && (
+            <div className="p-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-5 shadow-sm animate-in fade-in duration-300">
+              <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  <h3 className="font-bold text-sm text-[var(--text-primary)]">
+                    Agendamento de {scheduleResult.daysCovered} Dias Concluído com Sucesso!
+                  </h3>
+                </div>
+
+                <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                  {scheduleResult.totalJobsGenerated} Posts Agendados no BullMQ
+                </span>
+              </div>
+
+              {/* Schedule Summary Stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
+                <div className="p-3.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                  <span className="text-[var(--text-muted)] text-[10px] block">Período de Agendamento</span>
+                  <span className="font-bold text-indigo-400">
+                    {scheduleResult.startDate} até {scheduleResult.endDate}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                  <span className="text-[var(--text-muted)] text-[10px] block">Contas Cobertas</span>
+                  <span className="font-bold text-purple-400">
+                    {Object.keys(scheduleResult.jobsPerAccount).length} Contas ({postsPerDay * daysCount} posts/conta)
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
+                  <span className="text-[var(--text-muted)] text-[10px] block">Automação de Rotação</span>
+                  <span className="font-bold text-emerald-400">Copys, Hashtags e CTAs Aplicados &check;</span>
+                </div>
+              </div>
+
+              {/* Scheduled Jobs Table Preview */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-[var(--text-primary)]">
+                  Amostra da Fila Agendada para os Próximos 50 Dias (Primeiros 8 posts):
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead>
+                      <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)]">
+                        <th className="pb-2">Data / Hora Programada</th>
+                        <th className="pb-2">Conta Alvo</th>
+                        <th className="pb-2">Horário Local da Conta</th>
+                        <th className="pb-2">Mídia Vinculada</th>
+                        <th className="pb-2 text-right">Status na Fila</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-color)]">
+                      {scheduleResult.jobs.slice(0, 8).map((job) => (
+                        <tr key={job.id} className="hover:bg-[var(--bg-card-hover)] transition-colors">
+                          <td className="py-2.5 text-[var(--text-primary)] font-bold">{job.scheduledFor}</td>
+                          <td className="py-2.5 text-indigo-400 font-bold">{job.accountName}</td>
+                          <td className="py-2.5 text-purple-400">{job.accountLocalTime}</td>
+                          <td className="py-2.5 text-[var(--text-secondary)] font-sans">{job.mediaTitle}</td>
+                          <td className="py-2.5 text-right">
+                            <span className="px-2 py-0.5 rounded-md text-[10px] bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
+                              QUEUED (BullMQ)
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Standard Campaigns List */}
+      {viewMode === 'campaigns' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {filteredCampaigns.map((camp) => (
             <div key={camp.id} className="p-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-4 shadow-sm">
@@ -97,15 +324,13 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({ accounts, selected
                   <span className="font-mono text-purple-400 font-bold">{camp.scheduleTimes.join(', ')}</span>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between text-xs text-[var(--text-muted)] pt-2 border-t border-[var(--border-color)]">
-                <span>{camp.accountIds.length} Contas Associadas</span>
-                <span className="font-mono text-indigo-400 font-bold">{camp.languageCode}</span>
-              </div>
             </div>
           ))}
         </div>
-      ) : (
+      )}
+
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (
         <div className="p-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-4 shadow-sm">
           <h3 className="font-bold text-sm text-[var(--text-primary)]">Calendário de Distribuição Semanal</h3>
           <div className="grid grid-cols-7 gap-2 text-center text-xs font-mono">

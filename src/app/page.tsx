@@ -22,6 +22,7 @@ import { ExecutionHistoryView } from '@/components/ExecutionHistoryView';
 import { ReportsView } from '@/components/ReportsView';
 import { SwaggerDocsView } from '@/components/SwaggerDocsView';
 import { SystemLogsQueueView } from '@/components/SystemLogsQueueView';
+import { AntiDetectBrowserView } from '@/components/AntiDetectBrowserView';
 
 export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -77,6 +78,13 @@ export default function Home() {
 
         {/* Dynamic Main View Area */}
         <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto min-w-0">
+          {activeTab === 'antidetect_browser' && (
+            <AntiDetectBrowserView
+              accounts={accounts}
+              selectedCategory={selectedCategory}
+            />
+          )}
+
           {activeTab === 'dashboard' && (
             <DashboardView
               accounts={accounts}

@@ -14,9 +14,11 @@ import {
   FileCode2,
   Terminal,
   Sparkles,
+  Monitor,
 } from 'lucide-react';
 
 export type TabType =
+  | 'antidetect_browser'
   | 'dashboard'
   | 'accounts'
   | 'library'
@@ -37,6 +39,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const navItems: Array<{ id: TabType; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'antidetect_browser', label: 'Navegadores Anti-Detect', icon: Monitor, badge: 'NEW' },
     { id: 'accounts', label: 'Contas & Proxies', icon: Users, badge: '20' },
     { id: 'library', label: 'Biblioteca Central', icon: FolderKanban },
     { id: 'sharp_editor', label: 'Editor Sharp (Foto)', icon: ImageIcon, badge: 'Auto' },

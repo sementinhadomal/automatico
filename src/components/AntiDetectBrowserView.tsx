@@ -47,11 +47,119 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
   const [expandedScript, setExpandedScript] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'profiles' | 'bulk' | 'tutorial'>('profiles');
 
-  const handleLaunchBrowser = (accountId: string) => {
+  const BACKEND_URL = 'http://localhost:3001/api/v1';
+
+  // Gera o script .bat para Windows que abre o Chrome REAL com o proxy da conta
+  const generateWindowsLauncher = (acc: Account): string => {
+    const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
+    const proxyStr =
+      acc.proxy.protocol === 'SOCKS5'
+        ? `socks5://${acc.proxy.ip}:${acc.proxy.port}`
+        : `${acc.proxy.protocol.toLowerCase()}://${acc.proxy.ip}:${acc.proxy.port}`;
+
+    const chromePaths = [
+      `%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe`,
+      `%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe`,
+      `%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe`,
+    ];
+
+    return `@echo off
+title OmniMedia — ${acc.name} (${acc.country})
+echo ============================================
+echo   Abrindo Chrome para: ${acc.name}
+echo   Pais: ${acc.country}  Cidade: ${acc.city}
+echo   Proxy: ${proxyStr}
+echo   Perfil: ${profileDir}
+echo ============================================
+echo.
+
+:: Criar pasta de perfil isolado se nao existir
+if not exist "${profileDir}" mkdir "${profileDir}"
+
+:: Tentar abrir o Chrome (testa os 3 paths mais comuns no Windows)
+if exist "${chromePaths[0]}" (
+  start "" "${chromePaths[0]}" ^
+    --proxy-server="${proxyStr}" ^
+    --user-data-dir="${profileDir}" ^
+    --lang=${acc.languageCode.toLowerCase()} ^
+    --timezone-offset=0 ^
+    --no-first-run ^
+    --no-default-browser-check ^
+    --disable-sync ^
+    --window-size=1280,800 ^
+    https://whoer.net
+  goto :eof
+)
+
+if exist "${chromePaths[1]}" (
+  start "" "${chromePaths[1]}" ^
+    --proxy-server="${proxyStr}" ^
+    --user-data-dir="${profileDir}" ^
+    --lang=${acc.languageCode.toLowerCase()} ^
+    --no-first-run ^
+    --no-default-browser-check ^
+    --disable-sync ^
+    --window-size=1280,800 ^
+    https://whoer.net
+  goto :eof
+)
+
+if exist "${chromePaths[2]}" (
+  start "" "${chromePaths[2]}" ^
+    --proxy-server="${proxyStr}" ^
+    --user-data-dir="${profileDir}" ^
+    --lang=${acc.languageCode.toLowerCase()} ^
+    --no-first-run ^
+    --no-default-browser-check ^
+    --disable-sync ^
+    --window-size=1280,800 ^
+    https://whoer.net
+  goto :eof
+)
+
+echo ERRO: Chrome nao encontrado no seu computador!
+echo Por favor instale o Google Chrome e tente novamente.
+pause
+`;
+  };
+
+  const handleDownloadLauncher = (acc: Account) => {
+    const script = generateWindowsLauncher(acc);
+    const blob = new Blob([script], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `abrir_chrome_${acc.id}.bat`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadAllLaunchers = () => {
+    filteredAccounts.forEach((acc, i) => {
+      setTimeout(() => handleDownloadLauncher(acc), i * 200);
+    });
+  };
+
+  const handleLaunchViaBackend = async (accountId: string, acc: Account) => {
     setSessionStatuses((prev) => ({ ...prev, [accountId]: 'LAUNCHING' }));
-    setTimeout(() => {
-      setSessionStatuses((prev) => ({ ...prev, [accountId]: 'ACTIVE' }));
-    }, 1800);
+    try {
+      const res = await fetch(`${BACKEND_URL}/browser/launch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(acc),
+      });
+      if (res.ok) {
+        setSessionStatuses((prev) => ({ ...prev, [accountId]: 'ACTIVE' }));
+      } else {
+        throw new Error('Backend retornou erro');
+      }
+    } catch {
+      // Backend nao esta rodando — oferecer download do .bat
+      setSessionStatuses((prev) => ({ ...prev, [accountId]: 'IDLE' }));
+      handleDownloadLauncher(acc);
+    }
   };
 
   const handleStopBrowser = (accountId: string) => {
@@ -112,6 +220,14 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
           >
             <Square className="w-3.5 h-3.5" />
             Fechar Todos
+          </button>
+          <button
+            onClick={handleDownloadAllLaunchers}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 font-bold text-xs transition-all hover:scale-105"
+            title="Baixar um arquivo .bat por conta — dê duplo clique para abrir o Chrome com o proxy da conta sem precisar do backend"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Baixar Launchers .bat
           </button>
         </div>
       </div>
@@ -269,13 +385,23 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
                   {/* Action Buttons */}
                   <div className="flex items-center gap-2">
                     {status === 'IDLE' && (
-                      <button
-                        onClick={() => handleLaunchBrowser(acc.id)}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all hover:scale-[1.02] shadow-md shadow-indigo-600/30"
-                      >
-                        <Chrome className="w-3.5 h-3.5" />
-                        Abrir Chrome com Proxy
-                      </button>
+                      <div className="flex-1 flex gap-1.5">
+                        <button
+                          onClick={() => handleLaunchViaBackend(acc.id, acc)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all hover:scale-[1.02] shadow-md shadow-indigo-600/30"
+                          title="Tenta abrir via Backend (NestJS). Se o backend não estiver rodando, baixa o .bat automaticamente."
+                        >
+                          <Chrome className="w-3.5 h-3.5" />
+                          Abrir Chrome
+                        </button>
+                        <button
+                          onClick={() => handleDownloadLauncher(acc)}
+                          className="px-2.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 font-bold text-xs transition-all"
+                          title="Baixar launcher .bat — Dê duplo clique no arquivo para abrir o Chrome com proxy sem precisar do backend"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
 
                     {status === 'LAUNCHING' && (

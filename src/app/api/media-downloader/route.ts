@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
 
-const execAsync = promisify(exec);
-
-// yt-dlp local na pasta bin/ do projeto
-const YT_DLP = path.join(process.cwd(), 'bin', 'yt-dlp.exe');
+export const maxDuration = 60; // Vercel Pro: até 60s | Free: 10s
 
 export async function OPTIONS() {
   return new NextResponse(null, {
@@ -21,201 +13,209 @@ export async function OPTIONS() {
   });
 }
 
-// ─── Extrai JSON de metadados via yt-dlp ─────────────────────────────────────
-async function ytdlpGetInfo(url: string): Promise<any | null> {
-  try {
-    const { stdout } = await execAsync(
-      `"${YT_DLP}" --dump-json --no-playlist --no-warnings -q "${url}"`,
-      { timeout: 30000 }
-    );
-    return JSON.parse(stdout.trim().split('\n')[0]);
-  } catch {
-    return null;
-  }
-}
+// ─── Headers genéricos de browser ────────────────────────────────────────────
+const BROWSER_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+};
 
-// ─── Pega a melhor URL de vídeo+áudio do JSON do yt-dlp ──────────────────────
-function getBestDirectUrl(info: any): string {
-  if (!info) return '';
-
-  // requested_formats contém as URLs separadas de vídeo e áudio
-  // Para streaming direto queremos o formato com vídeo+áudio merged (single file)
-  const formats: any[] = info.formats || [];
-
-  // 1. Preferir formato único com vídeo + áudio (mp4)
-  const merged = formats
-    .filter((f) => f.url && f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
-    .sort((a, b) => (b.height || 0) - (a.height || 0));
-
-  if (merged[0]?.url) return merged[0].url;
-
-  // 2. Qualquer formato com vídeo (sem áudio) — ainda melhor que nada
-  const anyVideo = formats
-    .filter((f) => f.url && f.vcodec !== 'none')
-    .sort((a, b) => (b.height || 0) - (a.height || 0));
-
-  if (anyVideo[0]?.url) return anyVideo[0].url;
-
-  // 3. URL direto no objeto raiz
-  if (info.url) return info.url;
-
-  return '';
-}
-
-// ─── TikTok: usa tikwm (sem watermark) como primary, yt-dlp como fallback ────
+// ─── TikTok via tikwm (sem watermark, sem auth) ───────────────────────────────
 async function extractTikTok(url: string) {
-  // Tentativa 1: tikwm API (mais confiável para TikTok)
+  const apis = [
+    // tikwm – mais confiável, retorna HD sem watermark
+    async () => {
+      const r = await fetch(
+        `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`,
+        { headers: { 'User-Agent': BROWSER_HEADERS['User-Agent'] }, signal: AbortSignal.timeout(10000) }
+      );
+      const j = await r.json();
+      if (j?.data?.hdplay || j?.data?.play) {
+        return {
+          directUrl: j.data.hdplay || j.data.play,
+          title: (j.data.title as string) || 'TikTok Vídeo',
+          thumbnail: (j.data.cover as string) || '',
+        };
+      }
+      return null;
+    },
+    // Musicaldown API alternativa
+    async () => {
+      const form = new URLSearchParams({ id: url, locale: 'pt', tt: '' });
+      const r = await fetch('https://musicaldown.com/api/', {
+        method: 'POST',
+        headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://musicaldown.com/' },
+        body: form.toString(),
+        signal: AbortSignal.timeout(8000),
+      });
+      const j = await r.json();
+      if (j?.links?.[0]?.url) return { directUrl: j.links[0].url, title: j.title || 'TikTok', thumbnail: j.cover || '' };
+      return null;
+    },
+  ];
+
+  for (const fn of apis) {
+    try {
+      const res = await fn();
+      if (res?.directUrl) return res;
+    } catch (_) {}
+  }
+  return null;
+}
+
+// ─── YouTube Shorts via @distube/ytdl-core ────────────────────────────────────
+async function extractYouTube(url: string) {
   try {
-    const r = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+    // Dynamic import para não crashar no build caso o pacote falhe
+    const ytdl = await import('@distube/ytdl-core').catch(() => null);
+    if (!ytdl) throw new Error('ytdl-core não disponível');
+
+    const info = await ytdl.default.getInfo(url, { requestOptions: { headers: BROWSER_HEADERS } });
+    const format = ytdl.default.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'audioandvideo' })
+      ?? ytdl.default.chooseFormat(info.formats, { quality: 'highest' });
+
+    return {
+      directUrl: format?.url || '',
+      title: info.videoDetails.title || 'YouTube Vídeo',
+      thumbnail: info.videoDetails.thumbnails?.slice(-1)[0]?.url || '',
+    };
+  } catch (_) {}
+
+  // Fallback: cobalt.tools API pública
+  try {
+    const r = await fetch('https://co.wuk.sh/api/json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ url, vQuality: '1080', isNoTTWatermark: true }),
       signal: AbortSignal.timeout(10000),
     });
     const j = await r.json();
-    if (j?.data?.hdplay || j?.data?.play) {
-      return {
-        directUrl: j.data.hdplay || j.data.play,
-        title: j.data.title || 'TikTok Vídeo',
-        thumbnail: j.data.cover || '',
-      };
-    }
+    if (j?.url) return { directUrl: j.url, title: 'YouTube Shorts HD', thumbnail: '' };
   } catch (_) {}
-
-  // Tentativa 2: yt-dlp (pode falhar se IP bloqueado pelo TikTok)
-  const info = await ytdlpGetInfo(url);
-  if (info) {
-    return {
-      directUrl: getBestDirectUrl(info),
-      title: info.title || 'TikTok Vídeo',
-      thumbnail: info.thumbnail || '',
-    };
-  }
 
   return null;
 }
 
-// ─── YouTube / YT Shorts: yt-dlp funciona muito bem ─────────────────────────
-async function extractYouTube(url: string) {
-  const info = await ytdlpGetInfo(url);
-  if (!info) return null;
-
-  return {
-    directUrl: getBestDirectUrl(info),
-    title: info.title || 'YouTube Vídeo',
-    thumbnail: info.thumbnail || '',
-  };
-}
-
-// ─── Instagram: yt-dlp funciona para posts públicos ───────────────────────────
+// ─── Instagram via APIs públicas ─────────────────────────────────────────────
 async function extractInstagram(url: string) {
-  const info = await ytdlpGetInfo(url);
-  if (info) {
-    return {
-      directUrl: getBestDirectUrl(info),
-      title: info.title || 'Instagram Reels',
-      thumbnail: info.thumbnail || '',
-    };
+  const apis = [
+    // snapinsta.app API pública
+    async () => {
+      const r = await fetch('https://snapinsta.app/api', {
+        method: 'POST',
+        headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://snapinsta.app/' },
+        body: new URLSearchParams({ url }).toString(),
+        signal: AbortSignal.timeout(10000),
+      });
+      const j = await r.json();
+      const videoUrl = j?.data?.medias?.find((m: any) => m.type === 'mp4')?.url || j?.data?.url;
+      if (videoUrl) return { directUrl: videoUrl, title: 'Instagram Reels HD', thumbnail: j?.data?.thumbnail || '' };
+      return null;
+    },
+    // saveinsta / igram.io
+    async () => {
+      const r = await fetch(`https://igram.io/api/ajaxSearch`, {
+        method: 'POST',
+        headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://igram.io/' },
+        body: new URLSearchParams({ q: url }).toString(),
+        signal: AbortSignal.timeout(10000),
+      });
+      const j = await r.json();
+      if (j?.medias?.[0]?.url) return { directUrl: j.medias[0].url, title: 'Instagram Reels', thumbnail: j.thumbnail || '' };
+      return null;
+    },
+    // reelsaver.net
+    async () => {
+      const r = await fetch('https://reelsaver.net/api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...BROWSER_HEADERS },
+        body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const j = await r.json();
+      if (j?.url) return { directUrl: j.url, title: 'Instagram Reels', thumbnail: j.thumbnail || '' };
+      return null;
+    },
+  ];
+
+  for (const fn of apis) {
+    try {
+      const res = await fn();
+      if (res?.directUrl) return res;
+    } catch (_) {}
   }
-
-  // Fallback: igdownloader.app
-  try {
-    const r = await fetch(`https://igdownloader.app/api/instagram-downloader?url=${encodeURIComponent(url)}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(8000),
-    });
-    const j = await r.json();
-    if (j?.data?.url) return { directUrl: j.data.url, title: 'Instagram Reels', thumbnail: j.data.thumbnail || '' };
-  } catch (_) {}
-
   return null;
 }
 
-// ─── Stream de download: baixa via yt-dlp para tmp e serve como blob ─────────
-async function downloadViaYtdlp(url: string, filename: string): Promise<NextResponse> {
-  const tmpFile = path.join(os.tmpdir(), `dl_${Date.now()}.mp4`);
-
+// ─── Twitter / X ─────────────────────────────────────────────────────────────
+async function extractTwitter(url: string) {
   try {
-    await execAsync(
-      `"${YT_DLP}" -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 --no-playlist -o "${tmpFile}" -q --no-warnings "${url}"`,
-      { timeout: 180000 }
-    );
-
-    if (!fs.existsSync(tmpFile)) throw new Error('Arquivo não criado');
-
-    const buffer = fs.readFileSync(tmpFile);
-    try { fs.unlinkSync(tmpFile); } catch (_) {}
-
-    const clean = filename.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'video/mp4',
-        'Content-Disposition': `attachment; filename="${clean}"`,
-        'Content-Length': buffer.byteLength.toString(),
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=3600',
-      },
+    const r = await fetch(`https://twitsave.com/info?url=${encodeURIComponent(url)}`, {
+      headers: BROWSER_HEADERS,
+      signal: AbortSignal.timeout(10000),
     });
-  } catch (err: any) {
-    try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (_) {}
-    throw err;
-  }
+    const html = await r.text();
+    const match = html.match(/href="(https:\/\/video\.twimg\.com[^"]+)"/);
+    if (match) return { directUrl: match[1], title: 'Twitter/X Vídeo', thumbnail: '' };
+  } catch (_) {}
+  return null;
 }
 
-// ─── Proxy simples de URL direto de CDN ──────────────────────────────────────
-async function proxyDirectUrl(mediaUrl: string, filename: string): Promise<NextResponse> {
+// ─── Proxy: faz stream do arquivo de CDN para o browser ──────────────────────
+async function proxyStream(mediaUrl: string, filename: string): Promise<NextResponse> {
+  const clean = filename.replace(/[^a-zA-Z0-9_\-\.]/g, '_').substring(0, 100);
+
   const res = await fetch(mediaUrl, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0',
-      'Accept': 'video/webm,video/mp4,video/*;q=0.9,*/*;q=0.8',
-      'Referer': 'https://www.tiktok.com/',
+      ...BROWSER_HEADERS,
+      Accept: 'video/webm,video/mp4,video/*;q=0.9,*/*;q=0.8',
+      Referer: 'https://www.tiktok.com/',
     },
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(55000),
   });
 
-  if (!res.ok) throw new Error(`CDN retornou ${res.status}`);
+  if (!res.ok) throw new Error(`CDN retornou ${res.status}: ${res.statusText}`);
 
   const contentType = res.headers.get('content-type') || 'video/mp4';
-  const arrayBuffer = await res.arrayBuffer();
-  const clean = filename.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const buffer = await res.arrayBuffer();
 
-  return new NextResponse(arrayBuffer, {
+  return new NextResponse(buffer, {
     status: 200,
     headers: {
       'Content-Type': contentType,
       'Content-Disposition': `attachment; filename="${clean}"`,
-      'Content-Length': arrayBuffer.byteLength.toString(),
+      'Content-Length': buffer.byteLength.toString(),
       'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'public, max-age=3600',
     },
   });
 }
 
-// ─── GET: baixa um vídeo (já extraído via POST ou direto via yt-dlp) ─────────
+// ─── GET: proxy direto de URL de CDN já resolvida ────────────────────────────
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const targetUrl = searchParams.get('url');
   const rawFilename = searchParams.get('filename') || 'video.mp4';
-  const mode = searchParams.get('mode'); // 'ytdlp' = forçar download yt-dlp | 'proxy' = proxy direto CDN
 
   if (!targetUrl) {
     return NextResponse.json({ error: 'URL é obrigatória' }, { status: 400 });
   }
 
-  try {
-    if (mode === 'ytdlp') {
-      return await downloadViaYtdlp(targetUrl, rawFilename);
-    }
+  // Segurança: bloquear loop (não aceitar /api/ como url alvo)
+  if (targetUrl.startsWith('/') || targetUrl.includes('/api/media-downloader')) {
+    return NextResponse.json({ error: 'URL inválida' }, { status: 400 });
+  }
 
-    // Modo proxy (CDN direta — para links tikwm/googlevideo etc.)
-    return await proxyDirectUrl(targetUrl, rawFilename);
+  try {
+    return await proxyStream(targetUrl, rawFilename);
   } catch (error: any) {
-    console.error('[GET] erro:', error.message);
-    // Último recurso: download direto no browser
+    // Fallback: redireciona direto para o CDN
     return NextResponse.redirect(targetUrl, 307);
   }
 }
 
-// ─── POST: extrai metadata + gera URL de download ────────────────────────────
+// ─── POST: extrai a URL real do vídeo e retorna para o cliente ────────────────
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -240,21 +240,15 @@ export async function POST(req: NextRequest) {
       extracted = await extractYouTube(url);
     } else if (lower.includes('twitter.com') || lower.includes('x.com')) {
       platform = 'twitter';
-      extracted = await (async () => {
-        const info = await ytdlpGetInfo(url);
-        if (info) return { directUrl: getBestDirectUrl(info), title: info.title || 'Twitter Vídeo', thumbnail: info.thumbnail || '' };
-        return null;
-      })();
+      extracted = await extractTwitter(url);
     }
 
     const title = extracted?.title || `${platform.toUpperCase()} Vídeo HD`;
     const safeTitle = title.replace(/[^a-zA-Z0-9 _\-]/g, '').substring(0, 80) || `${platform}_video`;
 
     if (extracted?.directUrl) {
-      // Temos URL direta de CDN — usa proxy para servir o download
-      const isCdnDirect = extracted.directUrl.includes('googlevideo') || extracted.directUrl.includes('tikwm') || extracted.directUrl.includes('tikcdn') || extracted.directUrl.includes('tiktokcdn');
-      const mode = isCdnDirect ? 'proxy' : 'ytdlp';
-      const proxyDownloadUrl = `/api/media-downloader?url=${encodeURIComponent(extracted.directUrl)}&filename=${encodeURIComponent(safeTitle + '.mp4')}&mode=${mode}`;
+      // Gera URL de proxy apontando para o CDN direto (NUNCA para outra chamada da API)
+      const proxyDownloadUrl = `/api/media-downloader?url=${encodeURIComponent(extracted.directUrl)}&filename=${encodeURIComponent(safeTitle + '.mp4')}`;
 
       return NextResponse.json({
         success: true,
@@ -266,19 +260,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Nenhuma extração funcionou — retorna URL original com mode=ytdlp para tentar na hora do download
-    const proxyDownloadUrl = `/api/media-downloader?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(safeTitle + '.mp4')}&mode=ytdlp`;
-
+    // Nenhuma extração funcionou
     return NextResponse.json({
-      success: true,
+      success: false,
       platform,
       title,
-      downloadUrl: url,
+      downloadUrl: '',
       thumbnailUrl: '',
-      proxyDownloadUrl,
+      proxyDownloadUrl: '',
+      error: 'Não foi possível extrair o vídeo. Verifique se o link é público e tente novamente.',
     });
   } catch (error: any) {
-    console.error('[POST] erro:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

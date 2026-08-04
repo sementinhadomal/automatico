@@ -32,13 +32,15 @@ export interface ExtractedMediaResult {
   sourceUrl: string;
   platform: 'instagram' | 'tiktok' | 'youtube' | 'twitter' | 'generic';
   title: string;
-  downloadUrl: string;
+  downloadUrl: string;       // URL direta do CDN (para preview/importar)
+  proxyDownloadUrl: string;  // URL via /api proxy para download real
   thumbnailUrl: string;
   quality: string;
   durationSeconds: number;
   sizeMb: number;
   hasWatermark: boolean;
   status: 'PENDING' | 'EXTRACTING' | 'READY' | 'ERROR';
+  extractionError?: string;
 }
 
 export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
@@ -88,33 +90,40 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
     },
   ];
 
-  // Download seguro via Fetch Blob da nossa API local para contornar qualquer trava de permissão do Chrome
-  const handleForceDownload = async (url: string, title: string) => {
-    const cleanTitle = title.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  // Download: usa proxyDownloadUrl diretamente (já é /api/media-downloader?url=CDN_URL)
+  // NUNCA re-encapsula o proxyDownloadUrl em outro /api/media-downloader para evitar loop
+  const handleForceDownload = async (item: ExtractedMediaResult) => {
+    const cleanTitle = item.title.replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 60);
     const filename = `${cleanTitle}.mp4`;
-    const downloadApiUrl = `/api/media-downloader?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
 
-    try {
-      const response = await fetch(downloadApiUrl);
-      if (!response.ok) throw new Error('API Network Error');
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
+    // Se temos proxyDownloadUrl (URL de CDN via nosso proxy), usa diretamente
+    if (item.proxyDownloadUrl) {
+      try {
+        const response = await fetch(item.proxyDownloadUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          if (document.body.contains(a)) document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        }, 1500);
+        return;
+      } catch (err) {
+        // Fallback: abre em nova aba
+        window.open(item.proxyDownloadUrl, '_blank');
+        return;
+      }
+    }
 
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      
-      setTimeout(() => {
-        if (document.body.contains(a)) {
-          document.body.removeChild(a);
-        }
-        URL.revokeObjectURL(blobUrl);
-      }, 1000);
-    } catch (err) {
-      window.open(downloadApiUrl, '_blank');
+    // Sem proxy — abre URL de CDN diretamente
+    if (item.downloadUrl) {
+      window.open(item.downloadUrl, '_blank');
     }
   };
 
@@ -136,48 +145,53 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
       const platform = detectPlatform(url);
       const demo = demoVideos[idx % demoVideos.length];
 
-      let realDownloadUrl = demo.url;
+      let realDownloadUrl = '';
       let realThumbUrl = demo.thumb;
       let realTitle = `${platform.toUpperCase()} Vídeo HD #${idx + 1}`;
-      let proxyUrl = '';
+      let proxyDownloadUrl = '';
+      let extractionError = '';
 
       setProcessingStatus(`🔍 Extraindo (${idx + 1}/${lines.length}): ${url.substring(0, 50)}...`);
 
       try {
-        // Chama a API interna que usa múltiplos serviços em cascata
         const apiRes = await fetch('/api/media-downloader', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url }),
-          signal: AbortSignal.timeout(20000),
+          signal: AbortSignal.timeout(25000),
         });
 
         if (apiRes.ok) {
           const json = await apiRes.json();
           if (json.success && json.downloadUrl) {
-            realDownloadUrl = json.downloadUrl;
+            realDownloadUrl = json.downloadUrl;           // URL direta CDN
             realThumbUrl = json.thumbnailUrl || demo.thumb;
             realTitle = json.title || realTitle;
-            proxyUrl = json.proxyDownloadUrl || '';
+            proxyDownloadUrl = json.proxyDownloadUrl || ''; // /api?url=CDN_URL
+          } else if (json.error) {
+            extractionError = json.error;
           }
         }
-      } catch (e) {
-        // Fallback para vídeo demo — a CDN está inacessível ou timeout
-        console.warn('Extração falhou, usando fallback demo:', e);
+      } catch (e: any) {
+        extractionError = 'Timeout ou erro de rede';
+        console.warn('Extração falhou:', e?.message);
       }
 
+      const hasResult = !!realDownloadUrl;
       extractedResults.push({
         id: `ext_${Date.now()}_${idx}`,
         sourceUrl: url,
         platform,
         title: realTitle,
-        downloadUrl: proxyUrl || realDownloadUrl,
-        thumbnailUrl: realThumbUrl,
+        downloadUrl: realDownloadUrl,           // CDN direto (para importar à biblioteca)
+        proxyDownloadUrl,                       // /api proxy (para botão Baixar)
+        thumbnailUrl: hasResult ? realThumbUrl : demo.thumb,
         quality: selectedQuality === 'MP3' ? 'Áudio MP3 320kbps' : `${selectedQuality} HD (9:16)`,
         durationSeconds: Math.floor(Math.random() * 25) + 12,
         sizeMb: Number((Math.random() * 10 + 5).toFixed(1)),
         hasWatermark: !noWatermark,
-        status: 'READY',
+        status: hasResult ? 'READY' : 'ERROR',
+        extractionError,
       });
     }
 
@@ -403,7 +417,11 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
               return (
                 <div
                   key={item.id}
-                  className="p-4 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-3 shadow-sm hover:border-indigo-500/40 transition-all flex flex-col justify-between"
+                  className={`p-4 rounded-2xl bg-[var(--bg-card)] border space-y-3 shadow-sm transition-all flex flex-col justify-between ${
+                    item.status === 'ERROR'
+                      ? 'border-rose-500/40 hover:border-rose-500/60'
+                      : 'border-[var(--border-color)] hover:border-indigo-500/40'
+                  }`}
                 >
                   {/* Thumbnail & Badges */}
                   <div className="relative aspect-[9/16] rounded-xl overflow-hidden bg-black/40 border border-[var(--border-color)]">
@@ -441,13 +459,19 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
                     <p className="text-[10px] text-[var(--text-muted)] font-mono truncate">
                       {item.sourceUrl}
                     </p>
+                    {item.status === 'ERROR' && item.extractionError && (
+                      <p className="text-[10px] text-rose-400 font-mono bg-rose-500/10 border border-rose-500/20 rounded-lg px-2 py-1">
+                        ⚠️ {item.extractionError}
+                      </p>
+                    )}
                   </div>
 
                   {/* Actions */}
                   <div className="space-y-2 pt-2 border-t border-[var(--border-color)]">
                     <button
-                      onClick={() => handleForceDownload(item.downloadUrl, item.title)}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all text-center cursor-pointer"
+                      onClick={() => handleForceDownload(item)}
+                      disabled={!item.proxyDownloadUrl && !item.downloadUrl}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition-all text-center cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>Baixar MP4 Directo no PC</span>

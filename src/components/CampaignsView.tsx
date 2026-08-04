@@ -169,7 +169,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
               <div>
                 <h3 className="font-bold text-sm text-[var(--text-primary)] flex items-center gap-2">
                   <Zap className="w-4 h-4 text-amber-500" />
-                  Gerador Automático de 50 Dias de Publicações (150 Mídias)
+                  Gerador Automático de {daysCount} Dias de Publicações ({daysCount * postsPerDay} Posts por Conta)
                 </h3>
                 <p className="text-xs text-[var(--text-muted)]">
                   Distribuição automática das mídias editadas nos horários de pico de cada país com rotação de copys e hashtags.
@@ -177,20 +177,25 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
               </div>
 
               <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                150 Mídias &bull; {filteredAccounts.length} Contas
+                {daysCount} Dias &bull; {postsPerDay} Posts/Dia &bull; {filteredAccounts.length} Contas
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
               {/* Horizon Days */}
               <div className="space-y-1">
-                <label className="font-semibold text-[var(--text-secondary)]">Horizonte (Dias)</label>
-                <input
-                  type="number"
+                <label className="font-semibold text-[var(--text-secondary)]">Duração da Automação (Dias)</label>
+                <select
                   value={daysCount}
                   onChange={(e) => setDaysCount(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs font-bold text-[var(--text-primary)]"
-                />
+                >
+                  <option value={30}>30 Dias (1 Mês)</option>
+                  <option value={50}>50 Dias (Padrão)</option>
+                  <option value={60}>60 Dias (2 Meses)</option>
+                  <option value={90}>90 Dias (3 Meses)</option>
+                  <option value={120}>120 Dias (4 Meses)</option>
+                </select>
               </div>
 
               {/* Posts per Day */}
@@ -201,10 +206,10 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
                   onChange={(e) => setPostsPerDay(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] font-mono text-xs font-bold text-[var(--text-primary)]"
                 >
-                  <option value={1}>1 Post / dia (50 Posts total)</option>
-                  <option value={2}>2 Posts / dia (100 Posts total)</option>
-                  <option value={3}>3 Posts / dia (150 Posts total)</option>
-                  <option value={4}>4 Posts / dia (200 Posts total)</option>
+                  <option value={1}>1 Post / dia ({daysCount * 1} Posts total)</option>
+                  <option value={2}>2 Posts / dia ({daysCount * 2} Posts total)</option>
+                  <option value={3}>3 Posts / dia ({daysCount * 3} Posts total)</option>
+                  <option value={4}>4 Posts / dia ({daysCount * 4} Posts total)</option>
                 </select>
               </div>
 
@@ -260,14 +265,17 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
                 <CalendarDays className="w-3.5 h-3.5 text-indigo-400" />
                 Duração da Automação (Dias)
               </label>
-              <input
-                type="number"
-                min={1}
-                max={90}
+              <select
                 value={daysCount}
                 onChange={(e) => setDaysCount(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-bold focus:outline-none focus:border-indigo-500"
-              />
+                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-bold focus:outline-none focus:border-indigo-500 font-mono"
+              >
+                <option value={30}>30 Dias (1 Mês)</option>
+                <option value={50}>50 Dias (Padrão)</option>
+                <option value={60}>60 Dias (2 Meses)</option>
+                <option value={90}>90 Dias (3 Meses)</option>
+                <option value={120}>120 Dias (4 Meses)</option>
+              </select>
             </div>
           </div>
               <div className="flex items-center gap-2 pt-6">

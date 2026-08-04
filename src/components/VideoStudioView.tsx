@@ -24,6 +24,9 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ mediaAssets })
   const videoAssets = mediaAssets.filter((m) => m.type === 'VIDEO');
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset>(videoAssets[0] || mediaAssets[0]);
 
+  const [resolutionPreset, setResolutionPreset] = useState<'9:16' | '1:1' | '16:9'>('9:16');
+  const [targetWidth, setTargetWidth] = useState<number>(1080);
+  const [targetHeight, setTargetHeight] = useState<number>(1920);
   const [options, setOptions] = useState<VideoProcessingOptions>(FFmpegVideoProcessor.getDefaultOptions());
   const [generatedVariants, setGeneratedVariants] = useState<any[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);

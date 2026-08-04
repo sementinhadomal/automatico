@@ -24,6 +24,9 @@ interface ImageStudioViewProps {
 export const ImageStudioView: React.FC<ImageStudioViewProps> = ({ mediaAssets }) => {
   const imageAssets = mediaAssets.filter((m) => m.type === 'IMAGE');
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset>(imageAssets[0] || mediaAssets[0]);
+  const [preset, setPreset] = useState<'9:16' | '1:1' | '4:5'>('9:16');
+  const [width, setWidth] = useState<number>(1080);
+  const [height, setHeight] = useState<number>(1920);
 
   const [options, setOptions] = useState<ImageProcessingOptions>(SharpImageProcessor.getDefaultOptions());
   const [generatedVariants, setGeneratedVariants] = useState<any[]>([]);

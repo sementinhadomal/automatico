@@ -47,6 +47,23 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [daysCount, setDaysCount] = useState<number>(50);
   const [useTimeVariance, setUseTimeVariance] = useState<boolean>(true);
   const [timeSlots, setTimeSlots] = useState<string>('09:00, 15:00, 21:00');
+
+  // Platform Selection
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['instagram', 'tiktok']);
+
+  const togglePlatform = (platformId: string) => {
+    setSelectedPlatforms((prev) =>
+      prev.includes(platformId)
+        ? prev.filter((p) => p !== platformId)
+        : [...prev, platformId]
+    );
+  };
+
+  const platformOptions = [
+    { id: 'instagram', label: 'Instagram Reels', icon: '📸', color: 'from-pink-600 to-purple-600', border: 'border-pink-500/40', bg: 'bg-pink-500/10', text: 'text-pink-400' },
+    { id: 'tiktok', label: 'TikTok Vídeo', icon: '🎵', color: 'from-slate-900 to-slate-800', border: 'border-slate-400/40', bg: 'bg-slate-700/20', text: 'text-slate-300' },
+    { id: 'youtube_shorts', label: 'YouTube Shorts', icon: '▶️', color: 'from-red-700 to-red-600', border: 'border-red-500/40', bg: 'bg-red-500/10', text: 'text-red-400' },
+  ];
   
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [scheduleResult, setScheduleResult] = useState<BatchScheduleResult | null>(null);
@@ -97,6 +114,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
         scheduleTimes: timesArray,
         category: selectedCategory,
         randomizeTimeVarianceMinutes: useTimeVariance ? 8 : 0,
+        platforms: selectedPlatforms,
       });
 
       setScheduleResult(res);
@@ -179,6 +197,46 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
               <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 {daysCount} Dias &bull; {postsPerDay} Posts/Dia &bull; {filteredAccounts.length} Contas
               </span>
+            </div>
+
+            {/* Platform Selector */}
+            <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-3">
+              <div className="flex items-center gap-2">
+                <Send className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="text-xs font-bold text-[var(--text-secondary)]">Plataformas de Publicação (selecione onde postar)</span>
+                {selectedPlatforms.length === 0 && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    ⚠️ Selecione pelo menos 1 plataforma
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {platformOptions.map((platform) => {
+                  const isSelected = selectedPlatforms.includes(platform.id);
+                  return (
+                    <button
+                      key={platform.id}
+                      onClick={() => togglePlatform(platform.id)}
+                      className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border-2 text-xs font-bold transition-all hover:scale-105 ${
+                        isSelected
+                          ? `${platform.bg} ${platform.border} ${platform.text} shadow-md`
+                          : 'border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] opacity-50'
+                      }`}
+                    >
+                      <span className="text-base">{platform.icon}</span>
+                      <span>{platform.label}</span>
+                      {isSelected && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedPlatforms.length > 0 && (
+                <p className="text-[10px] text-[var(--text-muted)] font-mono">
+                  ✅ Cada post será publicado em: {selectedPlatforms.map((p) => platformOptions.find((o) => o.id === p)?.label).join(' + ')}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">

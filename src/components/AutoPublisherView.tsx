@@ -90,6 +90,7 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
   const currentMedia = selectedMedia || mediaAssets[0] || defaultDemoMedia;
 
   const [customCaption, setCustomCaption] = useState<string>('🔥 Conteúdo exclusivo liberado hoje!');
+  const [publishPlatforms, setPublishPlatforms] = useState<string[]>(['instagram', 'tiktok', 'youtube_shorts']);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<any | null>(null);
 
@@ -97,58 +98,65 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
   const hashtags = LocalizationEngine.rotateHashtags([]);
 
   const handlePublishNow = async () => {
+    if (publishPlatforms.length === 0) return;
     setIsPublishing(true);
     setPublishResult(null);
 
-    const adapter = PlatformIntegrationRegistry.getAdapter('instagram');
-    const authCheck = await adapter.validateAuth(currentAccount);
+    const results: any[] = [];
 
-    if (!authCheck.valid) {
-      setPublishResult({
-        success: false,
-        error: authCheck.message,
+    for (const plat of publishPlatforms) {
+      const adapter = PlatformIntegrationRegistry.getAdapter(plat);
+      const authCheck = await adapter.validateAuth(currentAccount);
+
+      if (!authCheck.valid) {
+        results.push({ platform: plat, success: false, error: authCheck.message });
+        continue;
+      }
+
+      const res = await adapter.publishContent({
+        accountId: currentAccount.id,
+        accountUsername: currentAccount.username,
+        proxy: currentAccount.proxy,
+        cookies: currentAccount.cookies,
+        mediaUrl: currentMedia.url,
+        mediaType: currentMedia.type,
+        caption: customCaption,
+        hashtags,
+        cta: ctaText,
+        scheduledTime: new Date().toISOString(),
       });
-      setIsPublishing(false);
-      return;
+
+      results.push({ platform: plat, ...res });
+
+      if (res.success) {
+        onPublishSuccess({
+          id: `log_${Math.random().toString(36).substring(2, 8)}`,
+          jobId: `job_${Math.random().toString(36).substring(2, 8)}`,
+          accountId: currentAccount.id,
+          accountName: currentAccount.name,
+          category: currentAccount.category,
+          platform: plat,
+          languageCode: currentAccount.languageCode,
+          countryCode: currentAccount.countryCode,
+          mediaTitle: currentMedia.title,
+          copyUsed: customCaption,
+          hashtagsUsed: hashtags,
+          ctaUsed: ctaText,
+          executionTimeMs: res.executionTimeMs,
+          result: 'SUCCESS',
+          statusCode: 200,
+          logDetail: `[PublishEngine] Disparo efetuado com sucesso via ${adapter.platformName}. Post ID: ${res.postId}`,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      }
     }
 
-    const res = await adapter.publishContent({
-      accountId: currentAccount.id,
-      accountUsername: currentAccount.username,
-      proxy: currentAccount.proxy,
-      cookies: currentAccount.cookies,
-      mediaUrl: currentMedia.url,
-      mediaType: currentMedia.type,
-      caption: customCaption,
-      hashtags,
-      cta: ctaText,
-      scheduledTime: new Date().toISOString(),
+    setPublishResult({
+      success: results.every((r) => r.success),
+      platformsCount: results.length,
+      details: results,
     });
-
-    setPublishResult(res);
     setIsPublishing(false);
-
-    if (res.success) {
-      onPublishSuccess({
-        id: `log_${Math.random().toString(36).substring(2, 8)}`,
-        jobId: `job_${Math.random().toString(36).substring(2, 8)}`,
-        accountId: selectedAccount.id,
-        accountName: selectedAccount.name,
-        category: selectedAccount.category,
-        platform: adapter.platformId,
-        languageCode: selectedAccount.languageCode,
-        countryCode: selectedAccount.countryCode,
-        mediaTitle: selectedMedia.title,
-        copyUsed: customCaption,
-        hashtagsUsed: hashtags,
-        ctaUsed: ctaText,
-        executionTimeMs: res.executionTimeMs,
-        result: 'SUCCESS',
-        statusCode: 200,
-        logDetail: `[PublishEngine] Dispatch success over proxy ${selectedAccount.proxy.ip}. Post ID: ${res.postId}`,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-    }
   };
 
   return (
@@ -232,6 +240,43 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
               onChange={(e) => setCustomCaption(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
             />
+          </div>
+
+          {/* 4. Platform Selector */}
+          <div className="space-y-2 text-xs">
+            <label className="font-semibold text-[var(--text-secondary)] flex items-center gap-2">
+              <Send className="w-3.5 h-3.5 text-indigo-400" />
+              4. Plataformas de Destino (multi-seleção)
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { id: 'instagram', label: 'Instagram', icon: '📸', color: 'border-pink-500/50 bg-pink-500/10 text-pink-400' },
+                { id: 'tiktok', label: 'TikTok', icon: '🎵', color: 'border-slate-400/50 bg-slate-700/20 text-slate-300' },
+                { id: 'youtube_shorts', label: 'YT Shorts', icon: '▶️', color: 'border-red-500/50 bg-red-500/10 text-red-400' },
+              ].map((pl) => {
+                const isOn = publishPlatforms.includes(pl.id);
+                return (
+                  <button
+                    key={pl.id}
+                    onClick={() =>
+                      setPublishPlatforms((prev) =>
+                        prev.includes(pl.id) ? prev.filter((p) => p !== pl.id) : [...prev, pl.id]
+                      )
+                    }
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 font-bold text-xs transition-all ${
+                      isOn ? pl.color + ' shadow-md scale-105' : 'border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-muted)] opacity-50'
+                    }`}
+                  >
+                    <span>{pl.icon}</span>
+                    <span>{pl.label}</span>
+                    {isOn && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
+                  </button>
+                );
+              })}
+            </div>
+            {publishPlatforms.length === 0 && (
+              <p className="text-rose-400 text-[10px] font-mono">⚠️ Selecione ao menos 1 plataforma</p>
+            )}
           </div>
 
           {/* Execute Button */}

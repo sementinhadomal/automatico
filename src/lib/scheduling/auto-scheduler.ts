@@ -9,6 +9,7 @@ export interface AutoScheduleOptions {
   scheduleTimes: string[]; // e.g. ["09:00", "15:00", "21:00"]
   category: CategoryType | 'ALL';
   randomizeTimeVarianceMinutes?: number; // e.g. +/- 10 mins variance to prevent strict bot patterns
+  platforms?: string[]; // e.g. ['instagram', 'tiktok', 'youtube_shorts']
 }
 
 export interface BatchScheduleResult {
@@ -52,6 +53,10 @@ export class BatchAutoSchedulerEngine {
     filteredAccounts.forEach((acc) => {
       jobsPerAccount[acc.id] = 0;
     });
+
+    const targetPlatforms = options.platforms && options.platforms.length > 0
+      ? options.platforms
+      : ['instagram', 'tiktok'];
 
     const now = new Date();
     let mediaIndex = 0;
@@ -107,27 +112,30 @@ export class BatchAutoSchedulerEngine {
           const scheduledFor = `${dateString} ${finalTimeStr}:00`;
           const accountLocalTime = `${finalTimeStr} (${acc.timezone.split('/')[1] || acc.timezone})`;
 
-          const job: QueueJob = {
-            id: `auto_job_${Math.random().toString(36).substring(2, 10)}`,
-            accountId: acc.id,
-            accountName: acc.name,
-            category: acc.category,
-            platform: 'instagram',
-            mediaId: mediaItem.id,
-            mediaTitle: `${mediaItem.title} (Dia ${day})`,
-            mediaType: mediaItem.type,
-            copyId: selectedCopy.id,
-            hashtagId: selectedHashtagSet.id,
-            ctaId: `cta_${acc.languageCode}`,
-            scheduledFor,
-            accountLocalTime,
-            status: 'QUEUED',
-            attempts: 0,
-            createdAt: new Date().toISOString(),
-          };
+          // For each platform selected by user, generate a job
+          targetPlatforms.forEach((plat) => {
+            const job: QueueJob = {
+              id: `auto_job_${Math.random().toString(36).substring(2, 10)}`,
+              accountId: acc.id,
+              accountName: acc.name,
+              category: acc.category,
+              platform: plat as any,
+              mediaId: mediaItem.id,
+              mediaTitle: `${mediaItem.title} (Dia ${day})`,
+              mediaType: mediaItem.type,
+              copyId: selectedCopy.id,
+              hashtagId: selectedHashtagSet.id,
+              ctaId: `cta_${acc.languageCode}`,
+              scheduledFor,
+              accountLocalTime,
+              status: 'QUEUED',
+              attempts: 0,
+              createdAt: new Date().toISOString(),
+            };
 
-          jobs.push(job);
-          jobsPerAccount[acc.id] = (jobsPerAccount[acc.id] || 0) + 1;
+            jobs.push(job);
+            jobsPerAccount[acc.id] = (jobsPerAccount[acc.id] || 0) + 1;
+          });
         });
       });
     }

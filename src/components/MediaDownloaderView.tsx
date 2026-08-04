@@ -54,6 +54,7 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
   const [selectedQuality, setSelectedQuality] = useState<'4K' | '1080p' | '720p' | 'MP3'>('1080p');
   
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
   const [extractedList, setExtractedList] = useState<ExtractedMediaResult[]>([]);
   const [importedIds, setImportedIds] = useState<string[]>([]);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
@@ -126,6 +127,7 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
     if (lines.length === 0) return;
 
     setIsProcessing(true);
+    setExtractedList([]);
 
     const extractedResults: ExtractedMediaResult[] = [];
 
@@ -136,21 +138,32 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
 
       let realDownloadUrl = demo.url;
       let realThumbUrl = demo.thumb;
-      let realTitle = `${platform.toUpperCase()} Video HD #${idx + 1}`;
+      let realTitle = `${platform.toUpperCase()} Vídeo HD #${idx + 1}`;
+      let proxyUrl = '';
 
-      // 1. Tentar extração real do TikTok via API pública sem watermark
-      if (platform === 'tiktok') {
-        try {
-          const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`);
+      setProcessingStatus(`🔍 Extraindo (${idx + 1}/${lines.length}): ${url.substring(0, 50)}...`);
+
+      try {
+        // Chama a API interna que usa múltiplos serviços em cascata
+        const apiRes = await fetch('/api/media-downloader', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+          signal: AbortSignal.timeout(20000),
+        });
+
+        if (apiRes.ok) {
           const json = await apiRes.json();
-          if (json && json.data) {
-            realDownloadUrl = json.data.play || json.data.wmplay || demo.url;
-            realThumbUrl = json.data.cover || demo.thumb;
-            realTitle = json.data.title || `TikTok Viral #${idx + 1}`;
+          if (json.success && json.downloadUrl) {
+            realDownloadUrl = json.downloadUrl;
+            realThumbUrl = json.thumbnailUrl || demo.thumb;
+            realTitle = json.title || realTitle;
+            proxyUrl = json.proxyDownloadUrl || '';
           }
-        } catch (e) {
-          // Fallback para CDN limpa
         }
+      } catch (e) {
+        // Fallback para vídeo demo — a CDN está inacessível ou timeout
+        console.warn('Extração falhou, usando fallback demo:', e);
       }
 
       extractedResults.push({
@@ -158,7 +171,7 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
         sourceUrl: url,
         platform,
         title: realTitle,
-        downloadUrl: realDownloadUrl,
+        downloadUrl: proxyUrl || realDownloadUrl,
         thumbnailUrl: realThumbUrl,
         quality: selectedQuality === 'MP3' ? 'Áudio MP3 320kbps' : `${selectedQuality} HD (9:16)`,
         durationSeconds: Math.floor(Math.random() * 25) + 12,
@@ -169,6 +182,7 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
     }
 
     setExtractedList(extractedResults);
+    setProcessingStatus('');
     setIsProcessing(false);
   };
 
@@ -336,24 +350,32 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
         </div>
 
         {/* Extract Action Button */}
-        <div className="flex justify-end pt-2">
-          <button
-            onClick={handleExtractVideos}
-            disabled={isProcessing || urlsInput.trim().length === 0}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-indigo-600 to-purple-600 hover:opacity-90 text-white font-bold text-xs shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
-          >
-            {isProcessing ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Processando e Removendo Marca D'água...</span>
-              </>
-            ) : (
-              <>
-                <Zap className="w-4 h-4" />
-                <span>Processar & Extrair Vídeos HD</span>
-              </>
-            )}
-          </button>
+        <div className="space-y-2 pt-2">
+          {processingStatus && (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs font-mono text-indigo-300 animate-pulse">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400 shrink-0" />
+              <span className="truncate">{processingStatus}</span>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <button
+              onClick={handleExtractVideos}
+              disabled={isProcessing || urlsInput.trim().length === 0}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-indigo-600 to-purple-600 hover:opacity-90 text-white font-bold text-xs shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
+            >
+              {isProcessing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Extraindo com serviços em cascata...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4" />
+                  <span>Processar &amp; Extrair Vídeos HD</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 

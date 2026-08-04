@@ -49,22 +49,52 @@ export const AnalyticsDashboardView: React.FC<AnalyticsDashboardViewProps> = ({
 }) => {
   const [platformFilter, setPlatformFilter] = useState<string>('ALL');
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '50d'>('30d');
+  const [showDemoSimulation, setShowDemoSimulation] = useState<boolean>(false);
 
-  // Gerar métricas simuladas realistas para cada uma das 20 contas
+  // Calcular métricas reais vinculadas a publicações efetuadas (ou 0 se não logou / não publicou)
   const engagementData: EngagementMetrics[] = accounts.map((acc, index) => {
+    const hasPublished = acc.publishedCount > 0 || acc.status === 'ONLINE';
     const isHot = acc.category === 'HOT';
-    const baseViews = isHot ? 45000 + index * 12000 : 18000 + index * 5000;
+    
+    // Se a simulação de demonstração não estiver ligada e a conta não tem publicações reais/login ativo, zera tudo
+    if (!showDemoSimulation && !hasPublished) {
+      return {
+        accountId: acc.id,
+        accountName: acc.name,
+        username: acc.username,
+        category: acc.category,
+        country: acc.country,
+        followers: 0,
+        totalViews: 0,
+        totalLikes: 0,
+        totalComments: 0,
+        totalShares: 0,
+        engagementRate: 0,
+        conversionRate: 0,
+        topPlatform: (['Instagram', 'TikTok', 'YouTube Shorts', 'X'] as const)[index % 4],
+        history: Array.from({ length: 7 }, (_, i) => ({
+          day: `Dia ${i + 1}`,
+          views: 0,
+          likes: 0,
+          engagement: 0,
+        })),
+      };
+    }
+
+    // Métricas calculadas proporcionalmente aos posts publicados
+    const postsCount = showDemoSimulation ? (isHot ? 30 + index * 5 : 15 + index * 3) : acc.publishedCount;
+    const baseViews = postsCount * (isHot ? 1500 : 800);
     const baseLikes = Math.round(baseViews * (isHot ? 0.08 : 0.05));
     const baseComments = Math.round(baseLikes * 0.12);
     const baseShares = Math.round(baseLikes * 0.08);
-    const engagementRate = Number(((baseLikes + baseComments + baseShares) / baseViews * 100).toFixed(2));
-    const conversionRate = Number((isHot ? 3.4 + index * 0.2 : 1.8 + index * 0.15).toFixed(2));
+    const engagementRate = baseViews > 0 ? Number(((baseLikes + baseComments + baseShares) / baseViews * 100).toFixed(2)) : 0;
+    const conversionRate = baseViews > 0 ? Number((isHot ? 3.4 : 1.8).toFixed(2)) : 0;
 
     const history = Array.from({ length: 7 }, (_, i) => ({
       day: `Dia ${i + 1}`,
-      views: Math.round(baseViews / 30 + Math.sin(i) * 1500),
-      likes: Math.round(baseLikes / 30 + Math.sin(i) * 120),
-      engagement: Number((engagementRate + (Math.sin(i) * 0.4)).toFixed(2)),
+      views: postsCount > 0 ? Math.round(baseViews / 30 + Math.sin(i) * 150) : 0,
+      likes: postsCount > 0 ? Math.round(baseLikes / 30 + Math.sin(i) * 12) : 0,
+      engagement: postsCount > 0 ? Number((engagementRate + (Math.sin(i) * 0.2)).toFixed(2)) : 0,
     }));
 
     const platforms: ('Instagram' | 'TikTok' | 'YouTube Shorts' | 'X')[] = ['Instagram', 'TikTok', 'YouTube Shorts', 'X'];
@@ -75,7 +105,7 @@ export const AnalyticsDashboardView: React.FC<AnalyticsDashboardViewProps> = ({
       username: acc.username,
       category: acc.category,
       country: acc.country,
-      followers: isHot ? 35000 + index * 4200 : 12000 + index * 1500,
+      followers: postsCount > 0 ? (isHot ? 3500 + index * 420 : 1200 + index * 150) : 0,
       totalViews: baseViews * (timeRange === '7d' ? 0.25 : timeRange === '50d' ? 1.6 : 1),
       totalLikes: baseLikes * (timeRange === '7d' ? 0.25 : timeRange === '50d' ? 1.6 : 1),
       totalComments: baseComments * (timeRange === '7d' ? 0.25 : timeRange === '50d' ? 1.6 : 1),
@@ -119,8 +149,20 @@ export const AnalyticsDashboardView: React.FC<AnalyticsDashboardViewProps> = ({
           </p>
         </div>
 
-        {/* Time Range Controls */}
-        <div className="flex items-center gap-2">
+        {/* Time Range Controls & Demo Toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowDemoSimulation(!showDemoSimulation)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+              showDemoSimulation
+                ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-sm'
+                : 'bg-[var(--bg-card)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+            title="Alternar entre métricas reais das contas (zeradas antes das postagens) e simulação de demonstração"
+          >
+            {showDemoSimulation ? '🧪 Simulação Demo' : '📊 Dados Reais (Zerado)'}
+          </button>
+
           {(['7d', '30d', '50d'] as const).map((range) => (
             <button
               key={range}

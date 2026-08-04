@@ -4,19 +4,25 @@ import React, { useState } from 'react';
 import { Campaign, Account, CategoryType, MediaAsset, QueueJob } from '@/types';
 import { INITIAL_CAMPAIGNS } from '@/lib/mockData';
 import { BatchAutoSchedulerEngine, BatchScheduleResult } from '@/lib/scheduling/auto-scheduler';
+import { IndividualAutoSchedulerEngine } from '@/lib/scheduling/individual-auto-scheduler';
 import {
   CalendarDays,
-  Plus,
+  Play,
+  CheckCircle2,
+  Clock,
+  Sparkles,
   Flame,
   ShoppingBag,
-  Clock,
-  Globe2,
-  Sparkles,
-  Zap,
-  CheckCircle2,
+  Layers,
+  Bot,
+  User,
+  Settings2,
   ListOrdered,
   Shuffle,
   Send,
+  Plus,
+  Globe2,
+  Zap,
 } from 'lucide-react';
 
 interface CampaignsViewProps {
@@ -36,13 +42,15 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [viewMode, setViewMode] = useState<'auto_50days' | 'campaigns' | 'calendar'>('auto_50days');
 
   // Auto-Scheduler Parameters
-  const [daysCount, setDaysCount] = useState<number>(50);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
   const [postsPerDay, setPostsPerDay] = useState<number>(3);
+  const [daysCount, setDaysCount] = useState<number>(50);
   const [useTimeVariance, setUseTimeVariance] = useState<boolean>(true);
   const [timeSlots, setTimeSlots] = useState<string>('09:00, 15:00, 21:00');
   
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [scheduleResult, setScheduleResult] = useState<BatchScheduleResult | null>(null);
+  const [individualScheduleResults, setIndividualScheduleResults] = useState<QueueJob[] | null>(null);
 
   const filteredCampaigns = campaigns.filter(
     (c) => selectedCategory === 'ALL' || c.category === selectedCategory
@@ -51,6 +59,31 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
   const filteredAccounts = accounts.filter(
     (a) => selectedCategory === 'ALL' || a.category === selectedCategory
   );
+
+  const handleRunIndividualSchedule = () => {
+    if (selectedAccountId === 'ALL') {
+      const result = BatchAutoSchedulerEngine.generateBatchSchedule(mediaAssets, filteredAccounts, {
+        daysCount,
+        postsPerDay,
+        targetAccountIds: [],
+        scheduleTimes: ['09:00', '15:00', '21:00'],
+        category: selectedCategory,
+      });
+      setScheduleResult(result);
+      setIndividualScheduleResults(null);
+    } else {
+      const targetAcc = accounts.find((a) => a.id === selectedAccountId);
+      if (!targetAcc) return;
+
+      const jobs = IndividualAutoSchedulerEngine.generateIndividual50DaysSchedule(targetAcc, mediaAssets, {
+        accountId: targetAcc.id,
+        postsPerDay,
+        daysCount,
+      });
+      setIndividualScheduleResults(jobs);
+      setScheduleResult(null);
+    }
+  };
 
   const handleRun50DaysAutoSchedule = () => {
     setIsGenerating(true);
@@ -186,7 +219,57 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
                 />
               </div>
 
-              {/* Variance Option */}
+              {/* Individual vs Bulk Account Selector */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)]">
+            <div>
+              <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-indigo-400" />
+                Selecione a Conta para Agendar
+              </label>
+              <select
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-bold focus:outline-none focus:border-indigo-500"
+              >
+                <option value="ALL">🌐 Todas as {filteredAccounts.length} Contas (Em Lote)</option>
+                {filteredAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.category === 'HOT' ? '🔥' : '🛍️'} {acc.name} — {acc.country} ({acc.username})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5 flex items-center gap-1.5">
+                <Settings2 className="w-3.5 h-3.5 text-indigo-400" />
+                Posts por Dia para esta Conta
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={postsPerDay}
+                onChange={(e) => setPostsPerDay(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-bold focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5 flex items-center gap-1.5">
+                <CalendarDays className="w-3.5 h-3.5 text-indigo-400" />
+                Duração da Automação (Dias)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                value={daysCount}
+                onChange={(e) => setDaysCount(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-card)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-bold focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
               <div className="flex items-center gap-2 pt-6">
                 <input
                   type="checkbox"

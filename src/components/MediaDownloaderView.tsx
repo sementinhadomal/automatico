@@ -87,23 +87,15 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
     },
   ];
 
-  // Download direto forçado via Blob para salvar o MP4 no PC sem abrir aba com erro
-  const handleForceDownload = async (url: string, title: string) => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Network error');
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = `${title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      window.open(url, '_blank');
-    }
+  // Download direto forçado via API Route do servidor Next.js para salvar o MP4 no PC sem CORS ou erro XML
+  const handleForceDownload = (url: string, title: string) => {
+    const downloadApiUrl = `/api/media-downloader?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(title.replace(/[^a-zA-Z0-9]/g, '_') + '.mp4')}`;
+    const a = document.createElement('a');
+    a.href = downloadApiUrl;
+    a.download = `${title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleExtractVideos = async () => {

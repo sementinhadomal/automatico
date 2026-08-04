@@ -87,15 +87,34 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
     },
   ];
 
-  // Download direto forçado via API Route do servidor Next.js para salvar o MP4 no PC sem CORS ou erro XML
-  const handleForceDownload = (url: string, title: string) => {
-    const downloadApiUrl = `/api/media-downloader?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(title.replace(/[^a-zA-Z0-9]/g, '_') + '.mp4')}`;
-    const a = document.createElement('a');
-    a.href = downloadApiUrl;
-    a.download = `${title.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  // Download seguro via Fetch Blob da nossa API local para contornar qualquer trava de permissão do Chrome
+  const handleForceDownload = async (url: string, title: string) => {
+    const cleanTitle = title.replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const filename = `${cleanTitle}.mp4`;
+    const downloadApiUrl = `/api/media-downloader?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+
+    try {
+      const response = await fetch(downloadApiUrl);
+      if (!response.ok) throw new Error('API Network Error');
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
+        }
+        URL.revokeObjectURL(blobUrl);
+      }, 1000);
+    } catch (err) {
+      window.open(downloadApiUrl, '_blank');
+    }
   };
 
   const handleExtractVideos = async () => {

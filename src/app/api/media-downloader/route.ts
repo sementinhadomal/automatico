@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const targetUrl = searchParams.get('url');
-  const filename = searchParams.get('filename') || 'video_hd.mp4';
+  const rawFilename = searchParams.get('filename') || 'video_hd.mp4';
+  const cleanFilename = rawFilename.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
 
   if (!targetUrl) {
     return NextResponse.json({ error: 'URL da mídia é obrigatória' }, { status: 400 });
@@ -26,14 +38,17 @@ export async function GET(req: NextRequest) {
     }
 
     const contentType = res.headers.get('content-type') || 'video/mp4';
-    const blob = await res.blob();
+    const arrayBuffer = await res.arrayBuffer();
 
-    return new NextResponse(blob, {
+    return new NextResponse(arrayBuffer, {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
-        'Cache-Control': 'no-cache',
+        'Content-Disposition': `attachment; filename="${cleanFilename}"`,
+        'Content-Length': arrayBuffer.byteLength.toString(),
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Cache-Control': 'public, max-age=3600',
       },
     });
   } catch (error: any) {

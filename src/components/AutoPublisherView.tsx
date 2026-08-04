@@ -69,7 +69,7 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
     id: 'media_demo_pub',
     title: 'Post 9:16 Demonstrativo',
     type: 'VIDEO',
-    url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
     thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop',
     category: 'HOT',
     languageCode: 'PT-PT',

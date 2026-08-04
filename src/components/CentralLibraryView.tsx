@@ -105,7 +105,7 @@ export const CentralLibraryView: React.FC<CentralLibraryViewProps> = ({
       id: `bulk_demo_${accId}_${Date.now()}_${i + 1}`,
       title: `Mídia 9:16 #${i + 1} — ${acc ? acc.name : 'Conta'}`,
       url: i % 2 === 0 
-        ? 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4'
+        ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
         : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop',
       thumbnailUrl: i % 2 === 0
         ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop'
@@ -135,7 +135,7 @@ export const CentralLibraryView: React.FC<CentralLibraryViewProps> = ({
     const newAsset: MediaAsset = {
       id: `media_${Date.now()}`,
       title: newTitle,
-      url: newUrl || (newType === 'VIDEO' ? 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4' : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop'),
+      url: newUrl || (newType === 'VIDEO' ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4' : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop'),
       thumbnailUrl: newType === 'VIDEO' ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop' : (newUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop'),
       type: newType,
       dimensions: '1080x1920 (9:16 Vertical)',

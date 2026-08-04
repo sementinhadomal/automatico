@@ -72,17 +72,17 @@ export const MediaDownloaderView: React.FC<MediaDownloaderViewProps> = ({
   const demoVideos = [
     {
       title: 'Reels Modelo Portuguesa 9:16 HD',
-      url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
       thumb: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop',
     },
     {
       title: 'TikTok Viral Trending Clean 1080p',
-      url: 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-posing-in-neon-light-40432-large.mp4',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
       thumb: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop',
     },
     {
       title: 'YouTube Shorts Dropshipping Product Video 4K',
-      url: 'https://assets.mixkit.co/videos/preview/mixkit-womans-feet-walking-on-the-beach-41527-large.mp4',
+      url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
       thumb: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=600&auto=format&fit=crop',
     },
   ];

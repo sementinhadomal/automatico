@@ -22,19 +22,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const res = await fetch(targetUrl, {
+    // Tentar com headers apropriados para evitar trava 403 da CDN de origem
+    const isTikTok = targetUrl.includes('tiktok');
+    const isInstagram = targetUrl.includes('instagram');
+    
+    let res = await fetch(targetUrl, {
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Accept: '*/*',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'video/webm,video/mp4,video/*;q=0.9,*/*;q=0.8',
+        'Referer': isTikTok ? 'https://www.tiktok.com/' : isInstagram ? 'https://www.instagram.com/' : 'https://google.com',
       },
     });
 
+    // Se a CDN retornar 403 ou qualquer erro, redireciona o navegador diretamente para a mídia em vez de exibir erro JSON
     if (!res.ok) {
-      return NextResponse.json(
-        { error: `Falha ao obter mídia da fonte. HTTP status: ${res.status}` },
-        { status: res.status }
-      );
+      return NextResponse.redirect(targetUrl, 307);
     }
 
     const contentType = res.headers.get('content-type') || 'video/mp4';
@@ -52,10 +55,8 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { error: `Erro no servidor de streaming: ${error.message}` },
-      { status: 500 }
-    );
+    // Fallback gracioso: redirecionamento direto sem tela de erro JSON
+    return NextResponse.redirect(targetUrl, 307);
   }
 }
 

@@ -62,35 +62,70 @@ export const CentralLibraryView: React.FC<CentralLibraryViewProps> = ({
 
   const handleFileUpload = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const file = files[0];
-    const isVideo = file.type.startsWith('video');
-    const objectUrl = URL.createObjectURL(file);
+    const fileArray = Array.from(files);
+    
+    const newAssets: MediaAsset[] = fileArray.map((file, index) => {
+      const isVideo = file.type.startsWith('video');
+      const objectUrl = URL.createObjectURL(file);
 
-    const newAsset: MediaAsset = {
-      id: `media_${Date.now()}`,
-      title: file.name.replace(/\.[^/.]+$/, ''),
-      url: objectUrl,
-      thumbnailUrl: isVideo ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop' : objectUrl,
-      type: isVideo ? 'VIDEO' : 'IMAGE',
-      dimensions: '1080x1920 (9:16 Vertical)',
-      durationSeconds: isVideo ? 15 : undefined,
-      category: newCategory,
-      accountId: newAccountId,
-      languageCode: 'PT-PT',
-      countryCode: 'PT',
-      tags: ['9:16', 'REELS', newCategory],
-      status: 'READY',
-      sizeMb: Number((file.size / (1024 * 1024)).toFixed(1)) || 5.2,
-      variantsCount: 3,
-      createdAt: new Date().toISOString(),
-    };
+      return {
+        id: `media_${Date.now()}_${index}`,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        url: objectUrl,
+        thumbnailUrl: isVideo ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop' : objectUrl,
+        type: isVideo ? 'VIDEO' : 'IMAGE',
+        dimensions: '1080x1920 (9:16 Vertical)',
+        durationSeconds: isVideo ? 15 : undefined,
+        category: newCategory,
+        accountId: newAccountId,
+        languageCode: 'PT-PT',
+        countryCode: 'PT',
+        tags: ['9:16', 'REELS', newCategory],
+        status: 'READY',
+        sizeMb: Number((file.size / (1024 * 1024)).toFixed(1)) || 5.2,
+        variantsCount: 3,
+        createdAt: new Date().toISOString(),
+      };
+    });
 
     if (onUpdateMediaAssets) {
-      onUpdateMediaAssets([newAsset, ...mediaAssets]);
+      onUpdateMediaAssets([...newAssets, ...mediaAssets]);
     }
     setIsUploadModalOpen(false);
     setNewTitle('');
     setNewUrl('');
+  };
+
+  const handleGenerateBulkDemoMedia = (accId: string, count: number = 150) => {
+    const acc = accounts.find((a) => a.id === accId);
+    const category = acc ? acc.category : newCategory;
+    const sampleAssets: MediaAsset[] = Array.from({ length: count }, (_, i) => ({
+      id: `bulk_demo_${accId}_${Date.now()}_${i + 1}`,
+      title: `Mídia 9:16 #${i + 1} — ${acc ? acc.name : 'Conta'}`,
+      url: i % 2 === 0 
+        ? 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4'
+        : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop',
+      thumbnailUrl: i % 2 === 0
+        ? 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop'
+        : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop',
+      type: i % 2 === 0 ? 'VIDEO' : 'IMAGE',
+      dimensions: '1080x1920 (9:16 Vertical)',
+      durationSeconds: i % 2 === 0 ? 15 : undefined,
+      category,
+      accountId: accId,
+      languageCode: acc ? acc.languageCode : 'PT-PT',
+      countryCode: acc ? acc.countryCode : 'PT',
+      tags: ['9:16', 'AUTOMATION_50_DAYS', category],
+      status: 'READY',
+      sizeMb: 6.8,
+      variantsCount: 3,
+      createdAt: new Date().toISOString(),
+    }));
+
+    if (onUpdateMediaAssets) {
+      onUpdateMediaAssets([...sampleAssets, ...mediaAssets]);
+    }
+    setIsUploadModalOpen(false);
   };
 
   const handleManualAdd = () => {
@@ -524,20 +559,30 @@ export const CentralLibraryView: React.FC<CentralLibraryViewProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-[var(--border-color)]">
+            <div className="flex items-center justify-between pt-3 border-t border-[var(--border-color)]">
               <button
-                onClick={() => setIsUploadModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+                onClick={() => handleGenerateBulkDemoMedia(newAccountId, 150)}
+                className="px-3 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-xs font-bold transition-all"
+                title="Gera 150 mídias 9:16 prontas vinculadas a esta conta para testar o piloto automático de 50 dias"
               >
-                Cancelar
+                ⚡ Gerar 150 Mídias 9:16 em Lote
               </button>
-              <button
-                onClick={handleManualAdd}
-                disabled={!newTitle.trim()}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-bold transition-all shadow-md"
-              >
-                Adicionar Mídia
-              </button>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsUploadModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleManualAdd}
+                  disabled={!newTitle.trim()}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-bold transition-all shadow-md"
+                >
+                  Adicionar Mídia
+                </button>
+              </div>
             </div>
           </div>
         </div>

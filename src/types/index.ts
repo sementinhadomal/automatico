@@ -13,7 +13,7 @@ export interface ProxyConfig {
   protocol: ProxyProtocol;
   latencyMs: number;
   status: 'ACTIVE' | 'FAILED' | 'TESTING';
-  lastTestedAt: string;
+  lastTestedAt?: string;
 }
 
 export interface Account {

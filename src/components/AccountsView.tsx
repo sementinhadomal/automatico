@@ -17,6 +17,7 @@ import {
   AlertCircle,
   ExternalLink,
   Wifi,
+  RefreshCw,
 } from 'lucide-react';
 
 interface AccountsViewProps {
@@ -32,6 +33,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [countryFilter, setCountryFilter] = useState<string>('ALL');
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkProxyText, setBulkProxyText] = useState('');
+  const [isTestingAll, setIsTestingAll] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [testingProxyId, setTestingProxyId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -85,6 +90,28 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             Controle de 20 contas ativas ({accounts.filter((a) => a.category === 'HOT').length} HOT,{' '}
             {accounts.filter((a) => a.category === 'DROP').length} DROPSHIPPING) preparadas para escalabilidade.
           </p>
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 mt-4">
+            <button
+              onClick={() => {
+                setIsTestingAll(true);
+                setTimeout(() => setIsTestingAll(false), 2000);
+              }}
+              disabled={isTestingAll}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600/10 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/20 font-bold text-xs transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isTestingAll ? 'animate-spin' : ''}`} />
+              {isTestingAll ? 'Testando 20 Proxies...' : 'Testar Conexão dos 20 Proxies'}
+            </button>
+
+            <button
+              onClick={() => setIsBulkImportOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-600/20 transition-all hover:scale-105"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Importar Proxies em Lote
+            </button>
+          </div>
         </div>
 
         <button

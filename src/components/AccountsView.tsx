@@ -226,9 +226,18 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             {/* Proxy Diagnostic Box */}
             <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/20 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5 font-semibold text-purple-400">
-                  <Wifi className="w-3.5 h-3.5" />
-                  <span>Proxy Exclusivo ({acc.proxy.protocol})</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 font-semibold text-purple-400">
+                    <Wifi className="w-3.5 h-3.5" />
+                    <span>Proxy Exclusivo ({acc.proxy.protocol})</span>
+                  </div>
+                  <button
+                    onClick={() => setEditingAccountId(acc.id)}
+                    className="p-1 hover:bg-purple-500/20 rounded text-purple-400"
+                    title="Editar Proxy Individual"
+                  >
+                    <Key className="w-3 h-3" />
+                  </button>
                 </div>
 
                 <button
@@ -258,6 +267,161 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
           </div>
         ))}
       </div>
+
+      {/* Bulk Import Modal */}
+      {isBulkImportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-xl">
+            <h3 className="text-lg font-bold text-[var(--text-primary)]">Importar Proxies em Lote</h3>
+            <p className="text-xs text-[var(--text-muted)]">
+              Cole seus proxies abaixo. O formato esperado é: <code>IP:PORTA:USER:SENHA</code> ou <code>IP:PORTA</code>.
+              Eles serão aplicados em ordem às contas exibidas atualmente.
+            </p>
+            <textarea
+              className="w-full h-32 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-3 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
+              placeholder="185.220.101.5:8080&#10;185.220.101.6:8080:user:pass"
+              value={bulkProxyText}
+              onChange={(e) => setBulkProxyText(e.target.value)}
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setIsBulkImportOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const lines = bulkProxyText.split('\n').map(l => l.trim()).filter(Boolean);
+                  let lineIndex = 0;
+                  const updatedAccounts = accounts.map(acc => {
+                    const isDisplayed = filteredAccounts.some(f => f.id === acc.id);
+                    if (isDisplayed && lineIndex < lines.length) {
+                      const parts = lines[lineIndex].split(':');
+                      const ip = parts[0];
+                      const port = parseInt(parts[1] || '8080', 10);
+                      const username = parts[2] || '';
+                      const password = parts[3] || '';
+                      lineIndex++;
+                      return {
+                        ...acc,
+                        proxy: {
+                          ...acc.proxy,
+                          ip,
+                          port,
+                          username,
+                          password,
+                          status: 'TESTING' as const
+                        }
+                      };
+                    }
+                    return acc;
+                  });
+                  onUpdateAccounts(updatedAccounts);
+                  setBulkProxyText('');
+                  setIsBulkImportOpen(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md"
+              >
+                Salvar Proxies
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Individual Proxy Edit Modal */}
+      {editingAccountId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-xl">
+            <h3 className="text-lg font-bold text-[var(--text-primary)]">Editar Proxy</h3>
+            <p className="text-xs text-[var(--text-muted)]">Configure o proxy para a conta selecionada.</p>
+            {(() => {
+              const acc = accounts.find(a => a.id === editingAccountId);
+              if (!acc) return null;
+              return (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] text-[var(--text-muted)] block mb-1">IP</label>
+                    <input
+                      type="text"
+                      id="edit-proxy-ip"
+                      defaultValue={acc.proxy.ip}
+                      className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--text-muted)] block mb-1">Porta</label>
+                    <input
+                      type="text"
+                      id="edit-proxy-port"
+                      defaultValue={acc.proxy.port}
+                      className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--text-muted)] block mb-1">Usuário (Opcional)</label>
+                    <input
+                      type="text"
+                      id="edit-proxy-user"
+                      defaultValue={acc.proxy.username || ''}
+                      className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--text-muted)] block mb-1">Senha (Opcional)</label>
+                    <input
+                      type="text"
+                      id="edit-proxy-pass"
+                      defaultValue={acc.proxy.password || ''}
+                      className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => setEditingAccountId(null)}
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => {
+                        const ip = (document.getElementById('edit-proxy-ip') as HTMLInputElement).value;
+                        const port = parseInt((document.getElementById('edit-proxy-port') as HTMLInputElement).value, 10);
+                        const user = (document.getElementById('edit-proxy-user') as HTMLInputElement).value;
+                        const pass = (document.getElementById('edit-proxy-pass') as HTMLInputElement).value;
+                        
+                        const updatedAccounts = accounts.map(a => {
+                          if (a.id === editingAccountId) {
+                            return {
+                              ...a,
+                              proxy: {
+                                ...a.proxy,
+                                ip,
+                                port: isNaN(port) ? a.proxy.port : port,
+                                username: user,
+                                password: pass,
+                                status: 'TESTING' as const
+                              }
+                            };
+                          }
+                          return a;
+                        });
+                        onUpdateAccounts(updatedAccounts);
+                        setEditingAccountId(null);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md"
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

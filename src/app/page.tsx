@@ -113,7 +113,11 @@ export default function Home() {
           )}
 
           {activeTab === 'library' && (
-            <CentralLibraryView mediaAssets={mediaAssets} selectedCategory={selectedCategory} />
+            <CentralLibraryView 
+              mediaAssets={mediaAssets} 
+              selectedCategory={selectedCategory} 
+              onUpdateMediaAssets={setMediaAssets}
+            />
           )}
 
           {activeTab === 'sharp_editor' && <ImageStudioView mediaAssets={mediaAssets} />}

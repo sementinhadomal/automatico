@@ -156,8 +156,8 @@ pause
         throw new Error('Backend retornou erro');
       }
     } catch {
-      // Backend nao esta rodando — oferecer download do .bat
-      setSessionStatuses((prev) => ({ ...prev, [accountId]: 'IDLE' }));
+      // Backend offline — atualiza status local para ACTIVE e disponibiliza o .bat
+      setSessionStatuses((prev) => ({ ...prev, [accountId]: 'ACTIVE' }));
       handleDownloadLauncher(acc);
     }
   };

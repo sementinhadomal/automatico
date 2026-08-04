@@ -66,8 +66,11 @@ export class BatchAutoSchedulerEngine {
         const timesToSchedule = options.scheduleTimes.slice(0, options.postsPerDay);
 
         timesToSchedule.forEach((timeStr) => {
-          // Select media asset cyclically
-          const mediaItem = mediaPool[mediaIndex % mediaPool.length];
+          // Seleção estrita de mídias exclusivas da conta (Modelo HOT ou Produto DROP específico)
+          const accountSpecificMedia = mediaAssets.filter((m) => m.accountId === acc.id);
+          const targetAccountMediaPool = accountSpecificMedia.length > 0 ? accountSpecificMedia : mediaPool;
+
+          const mediaItem = targetAccountMediaPool[mediaIndex % targetAccountMediaPool.length];
           mediaIndex++;
 
           // Select localized copy

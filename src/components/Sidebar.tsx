@@ -11,6 +11,7 @@ import {
   Send,
   History,
   BarChart3,
+  TrendingUp,
   FileCode2,
   Terminal,
   Sparkles,
@@ -20,6 +21,7 @@ import {
 export type TabType =
   | 'antidetect_browser'
   | 'dashboard'
+  | 'analytics'
   | 'accounts'
   | 'library'
   | 'sharp_editor'
@@ -39,6 +41,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const navItems: Array<{ id: TabType; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'analytics', label: 'Análise de Engajamento', icon: TrendingUp, badge: 'PRO' },
     { id: 'antidetect_browser', label: 'Navegadores Anti-Detect', icon: Monitor, badge: 'NEW' },
     { id: 'accounts', label: 'Contas & Proxies', icon: Users, badge: '20' },
     { id: 'library', label: 'Biblioteca Central', icon: FolderKanban },

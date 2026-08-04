@@ -23,6 +23,7 @@ import { ReportsView } from '@/components/ReportsView';
 import { SwaggerDocsView } from '@/components/SwaggerDocsView';
 import { SystemLogsQueueView } from '@/components/SystemLogsQueueView';
 import { AntiDetectBrowserView } from '@/components/AntiDetectBrowserView';
+import { AnalyticsDashboardView } from '@/components/AnalyticsDashboardView';
 
 export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -80,6 +81,13 @@ export default function Home() {
         <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto min-w-0">
           {activeTab === 'antidetect_browser' && (
             <AntiDetectBrowserView
+              accounts={accounts}
+              selectedCategory={selectedCategory}
+            />
+          )}
+
+          {activeTab === 'analytics' && (
+            <AnalyticsDashboardView
               accounts={accounts}
               selectedCategory={selectedCategory}
             />

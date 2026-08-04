@@ -52,6 +52,7 @@ export interface MediaAsset {
   url: string;
   thumbnailUrl?: string;
   category: CategoryType;
+  accountId?: string; // ID da conta exclusiva da mídia
   languageCode: string;
   countryCode: string;
   tags: string[];

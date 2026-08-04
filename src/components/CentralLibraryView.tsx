@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { MediaAsset, CopyItem, HashtagSet, CategoryType } from '@/types';
+import { MediaAsset, CopyItem, HashtagSet, CategoryType, Account } from '@/types';
 import {
   INITIAL_COPYS,
   INITIAL_HASHTAGS,
@@ -19,24 +19,31 @@ import {
   Check,
   Globe2,
   Sparkles,
+  User,
 } from 'lucide-react';
 
 interface CentralLibraryViewProps {
   mediaAssets: MediaAsset[];
+  accounts?: Account[];
   selectedCategory: CategoryType | 'ALL';
 }
 
 export const CentralLibraryView: React.FC<CentralLibraryViewProps> = ({
   mediaAssets,
+  accounts = [],
   selectedCategory,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'media' | 'copys' | 'hashtags' | 'ctas' | 'music'>('media');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'IMAGE' | 'VIDEO'>('ALL');
   const [langFilter, setLangFilter] = useState<string>('ALL');
 
   const filteredMedia = mediaAssets.filter(
-    (m) => (selectedCategory === 'ALL' || m.category === selectedCategory) &&
-           (langFilter === 'ALL' || m.languageCode === langFilter)
+    (m) =>
+      (selectedCategory === 'ALL' || m.category === selectedCategory) &&
+      (filterType === 'ALL' || m.type === filterType) &&
+      (selectedAccountFilter === 'ALL' || m.accountId === selectedAccountFilter)
   );
 
   const filteredCopys = INITIAL_COPYS.filter(

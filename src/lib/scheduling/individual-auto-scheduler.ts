@@ -21,7 +21,13 @@ export class IndividualAutoSchedulerEngine {
     const postsPerDay = config.postsPerDay || 3;
     const daysCount = config.daysCount || 50;
 
-    if (mediaPool.length === 0) return [];
+    // Filtrar mídias exclusivas da conta selecionada, ou mídias da mesma categoria se não houver vinculação direta
+    const accountMedia = mediaPool.filter((m) => m.accountId === account.id);
+    const targetMediaPool = accountMedia.length > 0
+      ? accountMedia
+      : mediaPool.filter((m) => m.category === account.category);
+
+    if (targetMediaPool.length === 0) return [];
 
     let mediaIndex = 0;
     const startDate = new Date();
@@ -36,7 +42,7 @@ export class IndividualAutoSchedulerEngine {
         : defaultHours.slice(0, postsPerDay);
 
       for (let postIndex = 0; postIndex < targetHours.length; postIndex++) {
-        const media = mediaPool[mediaIndex % mediaPool.length];
+        const media = targetMediaPool[mediaIndex % targetMediaPool.length];
         mediaIndex++;
 
         const scheduledTime = new Date(currentDayDate);

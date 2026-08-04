@@ -23,7 +23,9 @@ import {
   Upload,
   Plus,
   Trash2,
+  Download,
 } from 'lucide-react';
+import { MediaDownloaderView } from '@/components/MediaDownloaderView';
 
 interface CentralLibraryViewProps {
   mediaAssets: MediaAsset[];
@@ -38,7 +40,7 @@ export const CentralLibraryView: React.FC<CentralLibraryViewProps> = ({
   selectedCategory,
   onUpdateMediaAssets,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'media' | 'copys' | 'hashtags' | 'ctas' | 'music'>('media');
+  const [activeSubTab, setActiveSubTab] = useState<'media' | 'copys' | 'hashtags' | 'ctas' | 'music' | 'downloader'>('media');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>('ALL');
   const [filterType, setFilterType] = useState<'ALL' | 'IMAGE' | 'VIDEO'>('ALL');
@@ -258,6 +260,18 @@ export const CentralLibraryView: React.FC<CentralLibraryViewProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('downloader')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeSubTab === 'downloader'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                : 'text-emerald-400 hover:bg-[var(--bg-card)]'
+            }`}
+          >
+            <Download className="w-4 h-4" />
+            Downloader HD por Link
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('ctas')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
               activeSubTab === 'ctas'
@@ -440,6 +454,20 @@ export const CentralLibraryView: React.FC<CentralLibraryViewProps> = ({
             </div>
           ))}
         </div>
+      )}
+
+      {/* Downloader Tab */}
+      {activeSubTab === 'downloader' && (
+        <MediaDownloaderView
+          accounts={accounts}
+          mediaAssets={mediaAssets}
+          selectedCategory={selectedCategory}
+          onImportToLibrary={(newAssets) => {
+            if (onUpdateMediaAssets) {
+              onUpdateMediaAssets([...newAssets, ...mediaAssets]);
+            }
+          }}
+        />
       )}
       {/* Upload Media Modal */}
       {isUploadModalOpen && (

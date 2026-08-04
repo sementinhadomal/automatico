@@ -16,6 +16,7 @@ import {
   Terminal,
   Sparkles,
   Monitor,
+  Download,
 } from 'lucide-react';
 
 export type TabType =
@@ -24,6 +25,7 @@ export type TabType =
   | 'analytics'
   | 'accounts'
   | 'library'
+  | 'media_downloader'
   | 'sharp_editor'
   | 'ffmpeg_editor'
   | 'campaigns'
@@ -45,6 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: 'antidetect_browser', label: 'Navegadores Anti-Detect', icon: Monitor, badge: 'NEW' },
     { id: 'accounts', label: 'Contas & Proxies', icon: Users, badge: '20' },
     { id: 'library', label: 'Biblioteca Central', icon: FolderKanban },
+    { id: 'media_downloader', label: 'Downloader HD por Link', icon: Download, badge: 'HD' },
     { id: 'sharp_editor', label: 'Editor Sharp (Foto)', icon: ImageIcon, badge: 'Auto' },
     { id: 'ffmpeg_editor', label: 'Editor FFmpeg (Vídeo)', icon: VideoIcon, badge: 'Auto' },
     { id: 'campaigns', label: 'Campanhas & Agenda', icon: CalendarDays },

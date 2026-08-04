@@ -24,6 +24,7 @@ import { SwaggerDocsView } from '@/components/SwaggerDocsView';
 import { SystemLogsQueueView } from '@/components/SystemLogsQueueView';
 import { AntiDetectBrowserView } from '@/components/AntiDetectBrowserView';
 import { AnalyticsDashboardView } from '@/components/AnalyticsDashboardView';
+import { MediaDownloaderView } from '@/components/MediaDownloaderView';
 
 export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -114,9 +115,19 @@ export default function Home() {
 
           {activeTab === 'library' && (
             <CentralLibraryView 
-              mediaAssets={mediaAssets} 
+              mediaAssets={mediaAssets}
+              accounts={accounts}
               selectedCategory={selectedCategory} 
               onUpdateMediaAssets={setMediaAssets}
+            />
+          )}
+
+          {activeTab === 'media_downloader' && (
+            <MediaDownloaderView
+              accounts={accounts}
+              mediaAssets={mediaAssets}
+              selectedCategory={selectedCategory}
+              onImportToLibrary={(newAssets) => setMediaAssets([...newAssets, ...mediaAssets])}
             />
           )}
 

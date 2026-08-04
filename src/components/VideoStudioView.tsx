@@ -21,8 +21,29 @@ interface VideoStudioViewProps {
 }
 
 export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ mediaAssets }) => {
+  const defaultVideoAsset: MediaAsset = {
+    id: 'default_video_demo',
+    title: 'Vídeo Vertical Demonstrativo 9:16',
+    type: 'VIDEO',
+    url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop',
+    category: 'HOT',
+    languageCode: 'PT-PT',
+    countryCode: 'PT',
+    tags: ['DEMO', '9:16'],
+    status: 'READY',
+    dimensions: '1080x1920 (9:16)',
+    durationSeconds: 15,
+    sizeMb: 8.4,
+    createdAt: new Date().toISOString(),
+    variantsCount: 4,
+  };
+
   const videoAssets = mediaAssets.filter((m) => m.type === 'VIDEO');
-  const [selectedAsset, setSelectedAsset] = useState<MediaAsset>(videoAssets[0] || mediaAssets[0]);
+  const [selectedAsset, setSelectedAsset] = useState<MediaAsset>(
+    videoAssets[0] || mediaAssets[0] || defaultVideoAsset
+  );
+  const currentAsset = selectedAsset || videoAssets[0] || mediaAssets[0] || defaultVideoAsset;
 
   const [resolutionPreset, setResolutionPreset] = useState<'9:16' | '1:1' | '16:9'>('9:16');
   const [targetWidth, setTargetWidth] = useState<number>(1080);
@@ -74,7 +95,7 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ mediaAssets })
                 key={asset.id}
                 onClick={() => setSelectedAsset(asset)}
                 className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-semibold shrink-0 transition-all ${
-                  selectedAsset.id === asset.id
+                  currentAsset.id === asset.id
                     ? 'border-purple-500 bg-purple-500/10 text-purple-400'
                     : 'border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-secondary)]'
                 }`}
@@ -89,7 +110,7 @@ export const VideoStudioView: React.FC<VideoStudioViewProps> = ({ mediaAssets })
           <div className="p-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-4 shadow-sm text-center">
             <div className="relative inline-block max-w-full overflow-hidden rounded-xl bg-black border border-slate-800">
               <video
-                src={selectedAsset.url}
+                src={currentAsset.url}
                 controls
                 className="max-h-[380px] rounded-lg"
                 style={{

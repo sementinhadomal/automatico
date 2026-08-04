@@ -22,8 +22,28 @@ interface ImageStudioViewProps {
 }
 
 export const ImageStudioView: React.FC<ImageStudioViewProps> = ({ mediaAssets }) => {
+  const defaultImageAsset: MediaAsset = {
+    id: 'default_img_demo',
+    title: 'Imagem Demonstrativa 9:16',
+    type: 'IMAGE',
+    url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop',
+    category: 'HOT',
+    languageCode: 'PT-PT',
+    countryCode: 'PT',
+    tags: ['DEMO', '9:16'],
+    status: 'READY',
+    dimensions: '1080x1920 (9:16)',
+    sizeMb: 4.2,
+    createdAt: new Date().toISOString(),
+    variantsCount: 5,
+  };
+
   const imageAssets = mediaAssets.filter((m) => m.type === 'IMAGE');
-  const [selectedAsset, setSelectedAsset] = useState<MediaAsset>(imageAssets[0] || mediaAssets[0]);
+  const [selectedAsset, setSelectedAsset] = useState<MediaAsset>(
+    imageAssets[0] || mediaAssets[0] || defaultImageAsset
+  );
+  const currentAsset = selectedAsset || imageAssets[0] || mediaAssets[0] || defaultImageAsset;
   const [preset, setPreset] = useState<'9:16' | '1:1' | '4:5'>('9:16');
   const [width, setWidth] = useState<number>(1080);
   const [height, setHeight] = useState<number>(1920);
@@ -74,7 +94,7 @@ export const ImageStudioView: React.FC<ImageStudioViewProps> = ({ mediaAssets })
                 key={asset.id}
                 onClick={() => setSelectedAsset(asset)}
                 className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-semibold shrink-0 transition-all ${
-                  selectedAsset.id === asset.id
+                  currentAsset.id === asset.id
                     ? 'border-amber-500 bg-amber-500/10 text-amber-400'
                     : 'border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-secondary)]'
                 }`}
@@ -89,7 +109,7 @@ export const ImageStudioView: React.FC<ImageStudioViewProps> = ({ mediaAssets })
           <div className="p-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-4 shadow-sm text-center">
             <div className="relative inline-block max-w-full overflow-hidden rounded-xl bg-slate-950 p-2 border border-slate-800">
               <img
-                src={selectedAsset.url}
+                src={currentAsset.url}
                 alt="Sharp Preview"
                 className="max-h-[380px] object-contain rounded-lg transition-all duration-200"
                 style={{

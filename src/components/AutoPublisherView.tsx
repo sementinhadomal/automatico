@@ -31,13 +31,69 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
     (a) => selectedCategory === 'ALL' || a.category === selectedCategory
   );
 
-  const [selectedAccount, setSelectedAccount] = useState<Account>(availableAccounts[0] || accounts[0]);
-  const [selectedMedia, setSelectedMedia] = useState<MediaAsset>(mediaAssets[0]);
+  const defaultDemoAccount: Account = {
+    id: 'acc_demo_pub',
+    name: 'Conta Demonstrativa (PT)',
+    username: '@hot_vip_pt01',
+    passwordHash: 'vault_encrypted',
+    category: 'HOT',
+    country: 'Portugal',
+    countryCode: 'PT',
+    language: 'Português (Portugal)',
+    languageCode: 'PT-PT',
+    timezone: 'Europe/Lisbon',
+    city: 'Lisboa',
+    state: 'LIS',
+    currency: 'EUR (€)',
+    dateFormat: 'DD/MM/YYYY',
+    timeFormat: '24h',
+    proxy: {
+      id: 'px_demo',
+      ip: '185.220.101.5',
+      port: 8080,
+      protocol: 'SOCKS5',
+      latencyMs: 35,
+      status: 'ACTIVE',
+    },
+    cookies: 'session_active=true',
+    status: 'ONLINE',
+    lastLogin: new Date().toISOString(),
+    lastPublication: 'Sem publicações',
+    publishedCount: 0,
+    errorCount: 0,
+    notes: 'Conta demonstrativa',
+    tags: ['HOT', 'PT'],
+  };
+
+  const defaultDemoMedia: MediaAsset = {
+    id: 'media_demo_pub',
+    title: 'Post 9:16 Demonstrativo',
+    type: 'VIDEO',
+    url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop',
+    category: 'HOT',
+    languageCode: 'PT-PT',
+    countryCode: 'PT',
+    tags: ['9:16', 'REELS'],
+    status: 'READY',
+    dimensions: '1080x1920 (9:16)',
+    durationSeconds: 15,
+    sizeMb: 6.5,
+    createdAt: new Date().toISOString(),
+    variantsCount: 3,
+  };
+
+  const [selectedAccount, setSelectedAccount] = useState<Account>(availableAccounts[0] || accounts[0] || defaultDemoAccount);
+  const [selectedMedia, setSelectedMedia] = useState<MediaAsset>(mediaAssets[0] || defaultDemoMedia);
+
+  const currentAccount = selectedAccount || availableAccounts[0] || accounts[0] || defaultDemoAccount;
+  const currentMedia = selectedMedia || mediaAssets[0] || defaultDemoMedia;
+
   const [customCaption, setCustomCaption] = useState<string>('🔥 Conteúdo exclusivo liberado hoje!');
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<any | null>(null);
 
-  const ctaText = LocalizationEngine.getCtaForLanguage(selectedAccount.languageCode);
+  const ctaText = LocalizationEngine.getCtaForLanguage(currentAccount.languageCode);
   const hashtags = LocalizationEngine.rotateHashtags([]);
 
   const handlePublishNow = async () => {
@@ -45,7 +101,7 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
     setPublishResult(null);
 
     const adapter = PlatformIntegrationRegistry.getAdapter('instagram');
-    const authCheck = await adapter.validateAuth(selectedAccount);
+    const authCheck = await adapter.validateAuth(currentAccount);
 
     if (!authCheck.valid) {
       setPublishResult({
@@ -57,12 +113,12 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
     }
 
     const res = await adapter.publishContent({
-      accountId: selectedAccount.id,
-      accountUsername: selectedAccount.username,
-      proxy: selectedAccount.proxy,
-      cookies: selectedAccount.cookies,
-      mediaUrl: selectedMedia.url,
-      mediaType: selectedMedia.type,
+      accountId: currentAccount.id,
+      accountUsername: currentAccount.username,
+      proxy: currentAccount.proxy,
+      cookies: currentAccount.cookies,
+      mediaUrl: currentMedia.url,
+      mediaType: currentMedia.type,
       caption: customCaption,
       hashtags,
       cta: ctaText,

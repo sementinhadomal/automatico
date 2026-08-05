@@ -36,6 +36,24 @@ export default function Home() {
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(INITIAL_MEDIA_ASSETS);
   const [queueJobs, setQueueJobs] = useState<QueueJob[]>(INITIAL_QUEUE_JOBS);
   const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>(INITIAL_EXECUTION_LOGS);
+  
+  const [isStorageLoaded, setIsStorageLoaded] = useState(false);
+
+  useEffect(() => {
+    const savedAccounts = localStorage.getItem('omni_media_accounts');
+    if (savedAccounts) {
+      try {
+        setAccounts(JSON.parse(savedAccounts));
+      } catch (e) {}
+    }
+    setIsStorageLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (isStorageLoaded) {
+      localStorage.setItem('omni_media_accounts', JSON.stringify(accounts));
+    }
+  }, [accounts, isStorageLoaded]);
 
   useEffect(() => {
     if (isDarkMode) {

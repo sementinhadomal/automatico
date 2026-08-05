@@ -86,11 +86,12 @@ if not defined CHROME (
   exit /b 1
 )
 
-echo Iniciando Chrome com proxy %CHROME%...
+echo Iniciando Chrome Anonimo com proxy...
 start "" "%CHROME%" ^
   --proxy-server="${proxyStr}" ^
   --user-data-dir="${profileDir}" ^
   --lang=${acc.languageCode.toLowerCase()} ^
+  --incognito ^
   --no-first-run ^
   --no-default-browser-check ^
   --disable-sync ^
@@ -115,7 +116,7 @@ timeout /t 3 >nul
           ? `socks5://${acc.proxy.ip}:${acc.proxy.port}`
           : `${acc.proxy.protocol.toLowerCase()}://${acc.proxy.ip}:${acc.proxy.port}`;
       return `:: Conta ${i + 1}: ${acc.name}
-start "" "%CHROME%" --proxy-server="${proxyStr}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+start "" "%CHROME%" --proxy-server="${proxyStr}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 timeout /t 2 >nul`;
     });
 

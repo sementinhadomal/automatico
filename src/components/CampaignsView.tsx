@@ -268,6 +268,8 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
                   <option value={2}>2 Posts / dia ({daysCount * 2} Posts total)</option>
                   <option value={3}>3 Posts / dia ({daysCount * 3} Posts total)</option>
                   <option value={4}>4 Posts / dia ({daysCount * 4} Posts total)</option>
+                  <option value={5}>5 Posts / dia ({daysCount * 5} Posts total)</option>
+                  <option value={10}>10 Posts / dia ({daysCount * 10} Posts total)</option>
                 </select>
               </div>
 

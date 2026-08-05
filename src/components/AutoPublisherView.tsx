@@ -90,7 +90,7 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
   const currentMedia = selectedMedia || mediaAssets[0] || defaultDemoMedia;
 
   const [customCaption, setCustomCaption] = useState<string>('🔥 Conteúdo exclusivo liberado hoje!');
-  const [publishPlatforms, setPublishPlatforms] = useState<string[]>(['instagram', 'tiktok', 'youtube_shorts']);
+  const [publishPlatforms, setPublishPlatforms] = useState<string[]>(['instagram', 'tiktok', 'youtube_shorts', 'x_twitter']);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<any | null>(null);
 
@@ -252,7 +252,8 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
               {[
                 { id: 'instagram', label: 'Instagram', icon: '📸', color: 'border-pink-500/50 bg-pink-500/10 text-pink-400' },
                 { id: 'tiktok', label: 'TikTok', icon: '🎵', color: 'border-slate-400/50 bg-slate-700/20 text-slate-300' },
-                { id: 'youtube_shorts', label: 'YT Shorts', icon: '▶️', color: 'border-red-500/50 bg-red-500/10 text-red-400' },
+                { id: 'youtube_shorts', label: 'YouTube Shorts', icon: '▶️', color: 'border-red-500/50 bg-red-500/10 text-red-400' },
+                { id: 'x_twitter', label: 'X (Twitter)', icon: '𝕏', color: 'border-blue-500/50 bg-blue-500/10 text-blue-400' },
               ].map((pl) => {
                 const isOn = publishPlatforms.includes(pl.id);
                 return (

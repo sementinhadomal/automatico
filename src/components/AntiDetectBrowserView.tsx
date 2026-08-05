@@ -101,14 +101,16 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
     }
   };
 
-  // Gera .bat com autenticação (Chrome não suporta user:pass no proxy diretamente;
-  // usa extensão inline ou proxy sem auth — por isso geramos script PowerShell também)
+  // URL base do site (Vercel) onde o tunnel.js fica hospedado
+  const SITE_URL = 'https://multimedia-saas-platform.vercel.app';
+
+  // Gera .bat com autenticação - baixa tunnel.js do Vercel via PowerShell
   const generateAuthProxyLauncher = (): string => {
     if (!proxyParsed?.valid) return '';
-    const { host, port, user, pass, protocol } = proxyParsed;
+    const { host, port, user, pass } = proxyParsed;
     const profileDir = `C:\\OmniMedia\\CustomProxy`;
-    const proxyStr = `${protocol.toLowerCase() === 'socks5' ? 'socks5' : 'http'}://${host}:${port}`;
-    const hasAuth = user && pass;
+    const tunnelPort = 10899;
+    const hasAuth = !!(user && pass);
 
     return `@echo off
 chcp 65001 >nul
@@ -116,11 +118,20 @@ title OmniMedia — Chrome Anonimo com Proxy Customizado
 echo ============================================
 echo   Proxy: ${host}:${port}
 echo   ${hasAuth ? `Usuario: ${user}` : 'Sem autenticacao'}
-echo   Protocolo: ${protocol}
 echo ============================================
 echo.
 
+if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
+
+:: Baixar tunnel.js do servidor (apenas 1 vez)
+if not exist "C:\\OmniMedia\\tunnel.js" (
+  echo Baixando tunnel.js do servidor...
+  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+  if not exist "C:\\OmniMedia\\tunnel.js" (
+    echo AVISO: Nao foi possivel baixar tunnel.js. Usando proxy direto...
+  )
+)
 
 set "CHROME="
 for %%P in (
@@ -136,22 +147,24 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-${hasAuth ? `echo AVISO: Chrome nao suporta user:pass no proxy via linha de comando.
-echo Para proxies com autenticacao, use a extensao "Proxy SwitchyOmega" no Chrome
-echo ou configure o proxy nas configuracoes do sistema (Windows > Proxy).
-echo.
-echo Abrindo mesmo assim — voce precisara autenticar no popup do Chrome.
-echo.` : ''}
+set "TUNNEL_READY=0"
+where node >nul 2>nul
+if %errorlevel%==0 (
+  if exist "C:\\OmniMedia\\tunnel.js" (
+    if not "${user}"=="" (
+      start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${host}" ${port} "${user}" "${pass}" >nul 2>&1
+      set "TUNNEL_READY=1"
+      timeout /t 2 >nul
+      echo Tunnel SOCKS5 ativo na porta ${tunnelPort}!
+    )
+  )
+)
 
-start "" "%CHROME%" ^
-  --proxy-server="${proxyStr}" ^
-  --user-data-dir="${profileDir}" ^
-  --incognito ^
-  --no-first-run ^
-  --no-default-browser-check ^
-  --disable-sync ^
-  --window-size=1280,800 ^
-  https://whoer.net
+if "%TUNNEL_READY%"=="1" (
+  start "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+) else (
+  start "" "%CHROME%" --proxy-server="http://${host}:${port}" --user-data-dir="${profileDir}" --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+)
 
 echo Chrome aberto! Verifique o IP no whoer.net
 timeout /t 5 >nul
@@ -167,49 +180,15 @@ title OmniMedia — Lancador Permanente (Anti-Detect Browser)
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "C:\\OmniMedia\\Profiles" mkdir "C:\\OmniMedia\\Profiles"
 
-:: Criar script de tunnel SOCKS5 local se nao existir
+:: Baixar tunnel.js do servidor se nao existir (apenas 1 vez)
 if not exist "C:\\OmniMedia\\tunnel.js" (
-(
-echo const net = require('net'^);
-echo const localPort = parseInt(process.argv[2] || '10800', 10^);
-echo const targetHost = process.argv[3];
-echo const targetPort = parseInt(process.argv[4] || '10000', 10^);
-echo const proxyUser = process.argv[5] || '';
-echo const proxyPass = process.argv[6] || '';
-echo const server = net.createServer((clientSocket^) =^> {
-echo   const targetSocket = new net.Socket(^);
-echo   targetSocket.connect(targetPort, targetHost, (^) =^> {
-echo     targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]^)^);
-echo   }^);
-echo   let state = 'GREETING';
-echo   targetSocket.on('data', (data^) =^> {
-echo     if (state === 'GREETING'^) {
-echo       if (data[1] === 0x02 && proxyUser^) {
-echo         const u = Buffer.from(proxyUser^);
-echo         const p = Buffer.from(proxyPass^);
-echo         const req = Buffer.concat([Buffer.from([0x01, u.length]^), u, Buffer.from([p.length]^), p]^);
-echo         state = 'AUTH';
-echo         targetSocket.write(req^);
-echo       } else if (data[1] === 0x00^) {
-echo         state = 'CONNECTED';
-echo         clientSocket.write(Buffer.from([0x05, 0x00]^)^);
-echo         clientSocket.pipe(targetSocket^);
-echo         targetSocket.pipe(clientSocket^);
-echo       } else { clientSocket.destroy(^); }
-echo     } else if (state === 'AUTH'^) {
-echo       if (data[1] === 0x00^) {
-echo         state = 'CONNECTED';
-echo         clientSocket.write(Buffer.from([0x05, 0x00]^)^);
-echo         clientSocket.pipe(targetSocket^);
-echo         targetSocket.pipe(clientSocket^);
-echo       } else { clientSocket.destroy(^); targetSocket.destroy(^); }
-echo     }
-echo   }^);
-echo   clientSocket.on('error', (^) =^> targetSocket.destroy(^)^);
-echo   targetSocket.on('error', (^) =^> clientSocket.destroy(^)^);
-echo }^);
-echo server.listen(localPort, '127.0.0.1'^);
-) > "C:\\OmniMedia\\tunnel.js"
+  echo Baixando tunnel.js do servidor...
+  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+  if exist "C:\\OmniMedia\\tunnel.js" (
+    echo tunnel.js baixado com sucesso!
+  ) else (
+    echo AVISO: Nao foi possivel baixar tunnel.js. Continuando sem tunnel...
+  )
 )
 
 set "CHROME="
@@ -253,7 +232,7 @@ if not "%NEW_PROXY%"=="" (
   set "PROXY_TO_USE=%NEW_PROXY%"
   echo %NEW_PROXY%> "C:\\OmniMedia\\proxy_atual.txt"
   echo.
-  echo [OK] Proxy atualizado e salvo em C:\\OmniMedia\\proxy_atual.txt!
+  echo [OK] Proxy atualizado e salvo!
 ) else (
   if defined SAVED_PROXY (
     set "PROXY_TO_USE=%SAVED_PROXY%"
@@ -282,18 +261,21 @@ echo.
 set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
-  if defined PROXY_HOST (
-    start /b "" node "C:\\OmniMedia\\tunnel.js" 10899 "%PROXY_HOST%" "%PROXY_PORT%" "%PROXY_USER%" "%PROXY_PASS%" >nul 2^>^&1
-    set "TUNNEL_READY=1"
-    timeout /t 1 >nul
+  if exist "C:\\OmniMedia\\tunnel.js" (
+    if defined PROXY_USER (
+      start /b "" node "C:\\OmniMedia\\tunnel.js" 10899 "%PROXY_HOST%" "%PROXY_PORT%" "%PROXY_USER%" "%PROXY_PASS%" >nul 2>&1
+      set "TUNNEL_READY=1"
+      timeout /t 2 >nul
+      echo Tunnel SOCKS5 ativo na porta 10899!
+    )
   )
 )
 
 if "%TUNNEL_READY%"=="1" (
-  echo Proxy Autenticado Conectado via Tunnel SOCKS5 [127.0.0.1:10899]
+  echo Abrindo Chrome via Tunnel SOCKS5 autenticado...
   start "" "%CHROME%" --proxy-server="socks5://127.0.0.1:10899" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else if defined PROXY_HOST (
-  echo Proxy Conectado via HTTP [http://%PROXY_HOST%:%PROXY_PORT%]
+  echo Abrindo Chrome via HTTP proxy...
   start "" "%CHROME%" --proxy-server="http://%PROXY_HOST%:%PROXY_PORT%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else (
   echo Iniciando sem proxy...
@@ -314,71 +296,34 @@ timeout /t 4 >nul
     const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
     const px = customProxy || { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: acc.proxy.protocol };
     const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
+    const hasAuth = !!(px.user && px.pass);
 
     return `@echo off
 chcp 65001 >nul
 title OmniMedia — ${acc.name} (${acc.country})
 echo ============================================
 echo   Abrindo Chrome: ${acc.name}
-echo   Pais: ${acc.country} ^| Proxy: ${px.host}:${px.port}
+echo   Pais: ${acc.country} | Proxy: ${px.host}:${px.port}
 echo ============================================
 echo.
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
 
-:: Criar script de tunnel SOCKS5 local se nao existir
+:: Baixar tunnel.js do servidor se ainda nao existir (apenas 1 vez)
 if not exist "C:\\OmniMedia\\tunnel.js" (
-(
-echo const net = require('net'^);
-echo const localPort = parseInt(process.argv[2] || '10800', 10^);
-echo const targetHost = process.argv[3];
-echo const targetPort = parseInt(process.argv[4] || '10000', 10^);
-echo const proxyUser = process.argv[5] || '';
-echo const proxyPass = process.argv[6] || '';
-echo const server = net.createServer((clientSocket^) =^> {
-echo   const targetSocket = new net.Socket(^);
-echo   targetSocket.connect(targetPort, targetHost, (^) =^> {
-echo     targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]^)^);
-echo   }^);
-echo   let state = 'GREETING';
-echo   targetSocket.on('data', (data^) =^> {
-echo     if (state === 'GREETING'^) {
-echo       if (data[1] === 0x02 && proxyUser^) {
-echo         const u = Buffer.from(proxyUser^);
-echo         const p = Buffer.from(proxyPass^);
-echo         const req = Buffer.concat([Buffer.from([0x01, u.length]^), u, Buffer.from([p.length]^), p]^);
-echo         state = 'AUTH';
-echo         targetSocket.write(req^);
-echo       } else if (data[1] === 0x00^) {
-echo         state = 'CONNECTED';
-echo         clientSocket.write(Buffer.from([0x05, 0x00]^)^);
-echo         clientSocket.pipe(targetSocket^);
-echo         targetSocket.pipe(clientSocket^);
-echo       } else { clientSocket.destroy(^); }
-echo     } else if (state === 'AUTH'^) {
-echo       if (data[1] === 0x00^) {
-echo         state = 'CONNECTED';
-echo         clientSocket.write(Buffer.from([0x05, 0x00]^)^);
-echo         clientSocket.pipe(targetSocket^);
-echo         targetSocket.pipe(clientSocket^);
-echo       } else { clientSocket.destroy(^); targetSocket.destroy(^); }
-echo     }
-echo   }^);
-echo   clientSocket.on('error', (^) =^> targetSocket.destroy(^)^);
-echo   targetSocket.on('error', (^) =^> clientSocket.destroy(^)^);
-echo }^);
-echo server.listen(localPort, '127.0.0.1'^);
-) > "C:\\OmniMedia\\tunnel.js"
+  echo Baixando tunnel.js...
+  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
 )
 
 set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
-  if not "${px.user}"=="" (
-    start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" >nul 2^>^&1
+  if exist "C:\\OmniMedia\\tunnel.js" (
+${hasAuth ? `    start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" >nul 2>&1
     set "TUNNEL_READY=1"
-    timeout /t 1 >nul
+    timeout /t 2 >nul
+    echo Tunnel SOCKS5 ativo na porta ${tunnelPort}` : '    :: Sem autenticacao - nao precisa de tunnel'}
   )
 )
 
@@ -397,29 +342,11 @@ if not defined CHROME (
 )
 
 if "%TUNNEL_READY%"=="1" (
-  echo Proxy Autenticado Conectado via Tunnel SOCKS5 [127.0.0.1:${tunnelPort}]
-  start "" "%CHROME%" ^
-    --proxy-server="socks5://127.0.0.1:${tunnelPort}" ^
-    --user-data-dir="${profileDir}" ^
-    --lang=${acc.languageCode.toLowerCase()} ^
-    --incognito ^
-    --no-first-run ^
-    --no-default-browser-check ^
-    --disable-sync ^
-    --window-size=1280,800 ^
-    https://whoer.net
+  echo Proxy Autenticado via Tunnel SOCKS5 [127.0.0.1:${tunnelPort}]
+  start "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  echo Proxy conectado via HTTP...
-  start "" "%CHROME%" ^
-    --proxy-server="http://${px.host}:${px.port}" ^
-    --user-data-dir="${profileDir}" ^
-    --lang=${acc.languageCode.toLowerCase()} ^
-    --incognito ^
-    --no-first-run ^
-    --no-default-browser-check ^
-    --disable-sync ^
-    --window-size=1280,800 ^
-    https://whoer.net
+  echo Proxy HTTP direto [${px.host}:${px.port}]
+  start "" "%CHROME%" --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
 
 echo Chrome aberto com sucesso!

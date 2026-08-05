@@ -19,6 +19,7 @@ import {
   Wifi,
   RefreshCw,
   Zap,
+  Download,
 } from 'lucide-react';
 
 interface AccountsViewProps {
@@ -67,6 +68,87 @@ const ProxyEditModal: React.FC<{
     if (parsedUser) setUser(parsedUser);
     if (parsedPass) setPass(parsedPass);
     if (parsedHost && parsedPort) setPastedStatus(true);
+  };
+
+  const SITE_URL = 'https://multimedia-saas-platform.vercel.app';
+
+  const generateLauncherBat = (accId: string, accName: string, accCountry: string, accLang: string, pxHost: string, pxPort: string, pxUser: string, pxPass: string): string => {
+    const profileDir = `C:\\OmniMedia\\Profiles\\${accId}`;
+    const tunnelPort = 10800 + (Math.abs(accId.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
+    const hasAuth = !!(pxUser && pxPass);
+
+    return `@echo off
+chcp 65001 >nul
+title OmniMedia — ${accName} (${accCountry})
+echo ============================================
+echo   Abrindo Chrome: ${accName}
+echo   Pais: ${accCountry} | Proxy: ${pxHost}:${pxPort}
+echo ============================================
+echo.
+
+if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
+if not exist "${profileDir}" mkdir "${profileDir}"
+
+:: Baixar tunnel.js do servidor se ainda nao existir (apenas 1 vez)
+if not exist "C:\\OmniMedia\\tunnel.js" (
+  echo Baixando tunnel.js...
+  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+)
+
+set "TUNNEL_READY=0"
+where node >nul 2>nul
+if %errorlevel%==0 (
+  if exist "C:\\OmniMedia\\tunnel.js" (
+${hasAuth
+  ? `    start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${pxHost}" ${pxPort} "${pxUser}" "${pxPass}" >nul 2>&1
+    set "TUNNEL_READY=1"
+    timeout /t 2 >nul
+    echo Tunnel SOCKS5 ativo na porta ${tunnelPort}`
+  : '    :: Sem autenticacao - nao precisa de tunnel'}
+  )
+)
+
+set "CHROME="
+for %%P in (
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+) do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
+
+if not defined CHROME (
+  echo ERRO: Chrome nao encontrado!
+  pause & exit /b 1
+)
+
+if "%TUNNEL_READY%"=="1" (
+  echo Proxy Autenticado via Tunnel SOCKS5 [127.0.0.1:${tunnelPort}]
+  start "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${accLang.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+) else (
+  echo Proxy HTTP direto [${pxHost}:${pxPort}]
+  start "" "%CHROME%" --proxy-server="http://${pxHost}:${pxPort}" --user-data-dir="${profileDir}" --lang=${accLang.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+)
+
+echo Chrome aberto com sucesso!
+timeout /t 3 >nul
+`;
+  };
+
+  const handleSaveAndDownload = () => {
+    const parsedPort = parseInt(port, 10);
+    const finalPort = isNaN(parsedPort) ? account.proxy.port : parsedPort;
+    onSave(ip, finalPort, user, pass);
+    const script = generateLauncherBat(account.id, account.name, account.country, account.languageCode || 'pt-BR', ip, String(finalPort), user, pass);
+    const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chrome_${account.countryCode}_${account.id.slice(-4)}.bat`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -151,23 +233,44 @@ const ProxyEditModal: React.FC<{
           </div>
         </div>
 
+        {/* Preview do proxy atual */}
+        {ip && port && (
+          <div className="p-2.5 rounded-xl bg-[var(--bg-primary)] border border-indigo-500/20 text-xs font-mono text-indigo-300 flex items-center gap-2">
+            <span className="text-emerald-400">✓</span>
+            <span>{ip}:{port}{user ? `:${user}:••••` : ''}</span>
+          </div>
+        )}
+
         {/* Botões */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-color)]">
+        <div className="flex flex-col gap-2 pt-3 border-t border-[var(--border-color)]">
+          {/* Botão principal: Salvar + Baixar Launcher */}
           <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all cursor-pointer"
+            onClick={handleSaveAndDownload}
+            disabled={!ip || !port}
+            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
           >
-            Cancelar
+            <Download className="w-4 h-4" />
+            💾 Salvar Proxy &amp; Baixar Launcher .bat
           </button>
-          <button
-            onClick={() => {
-              const parsedPort = parseInt(port, 10);
-              onSave(ip, isNaN(parsedPort) ? account.proxy.port : parsedPort, user, pass);
-            }}
-            className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
-          >
-            Salvar Proxy
-          </button>
+
+          {/* Botão secundário: Só salvar sem baixar */}
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border-color)] hover:border-[var(--text-muted)] transition-all cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                const parsedPort = parseInt(port, 10);
+                onSave(ip, isNaN(parsedPort) ? account.proxy.port : parsedPort, user, pass);
+              }}
+              className="flex-1 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 text-xs font-bold transition-all border border-purple-500/30 cursor-pointer"
+            >
+              Só Salvar (sem .bat)
+            </button>
+          </div>
         </div>
       </div>
     </div>

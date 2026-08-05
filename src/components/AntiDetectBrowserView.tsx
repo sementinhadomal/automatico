@@ -44,19 +44,131 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
   );
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedScript, setExpandedScript] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'profiles' | 'bulk' | 'tutorial' | 'launcher'>('profiles');
+  const [activeTab, setActiveTab] = useState<'profiles' | 'proxy' | 'bulk' | 'tutorial'>('proxy');
   const [copiedScript, setCopiedScript] = useState(false);
+
+  // ─── Estado do Proxy Customizado ──────────────────────────────────────────
+  const [proxyInput, setProxyInput] = useState('');
+  const [proxyParsed, setProxyParsed] = useState<{
+    host: string; port: string; user: string; pass: string; protocol: string; valid: boolean;
+  } | null>(null);
+  const [proxyAppliedTo, setProxyAppliedTo] = useState<string[]>([]);
+
+  // Detecta formato e extrai campos do proxy
+  const parseProxy = (raw: string) => {
+    const str = raw.trim();
+    if (!str) { setProxyParsed(null); return; }
+
+    // Suporta os formatos mais comuns:
+    // host:port:user:pass
+    // host:port@user:pass
+    // user:pass@host:port
+    // socks5://user:pass@host:port
+    // http://host:port
+    let host = '', port = '', user = '', pass = '', protocol = 'HTTP';
+
+    try {
+      // Tenta URL completo primeiro
+      if (str.includes('://')) {
+        const u = new URL(str.includes('://') ? str : 'http://' + str);
+        host = u.hostname;
+        port = u.port;
+        user = u.username;
+        pass = u.password;
+        protocol = str.startsWith('socks5') ? 'SOCKS5' : str.startsWith('socks4') ? 'SOCKS4' : 'HTTP';
+      } else if (str.includes('@')) {
+        // user:pass@host:port
+        const [credentials, hostpart] = str.split('@');
+        [user, pass] = credentials.split(':');
+        [host, port] = hostpart.split(':');
+      } else {
+        // host:port:user:pass (mais comum em listas de proxy)
+        const parts = str.split(':');
+        if (parts.length === 4) {
+          [host, port, user, pass] = parts;
+        } else if (parts.length === 2) {
+          [host, port] = parts;
+        } else if (parts.length === 3) {
+          // pode ser host:port:user sem pass
+          [host, port, user] = parts;
+        }
+      }
+
+      const valid = !!host && !!port && !isNaN(Number(port));
+      setProxyParsed({ host, port, user, pass, protocol, valid });
+    } catch {
+      setProxyParsed({ host: '', port: '', user: '', pass: '', protocol: 'HTTP', valid: false });
+    }
+  };
+
+  // Gera .bat com autenticação (Chrome não suporta user:pass no proxy diretamente;
+  // usa extensão inline ou proxy sem auth — por isso geramos script PowerShell também)
+  const generateAuthProxyLauncher = (): string => {
+    if (!proxyParsed?.valid) return '';
+    const { host, port, user, pass, protocol } = proxyParsed;
+    const profileDir = `C:\\OmniMedia\\CustomProxy`;
+    const proxyStr = `${protocol.toLowerCase() === 'socks5' ? 'socks5' : 'http'}://${host}:${port}`;
+    const hasAuth = user && pass;
+
+    return `@echo off
+chcp 65001 >nul
+title OmniMedia — Chrome Anonimo com Proxy Customizado
+echo ============================================
+echo   Proxy: ${host}:${port}
+echo   ${hasAuth ? `Usuario: ${user}` : 'Sem autenticacao'}
+echo   Protocolo: ${protocol}
+echo ============================================
+echo.
+
+if not exist "${profileDir}" mkdir "${profileDir}"
+
+set "CHROME="
+for %%P in (
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+) do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
+
+if not defined CHROME (
+  echo ERRO: Chrome nao encontrado!
+  pause & exit /b 1
+)
+
+${hasAuth ? `echo AVISO: Chrome nao suporta user:pass no proxy via linha de comando.
+echo Para proxies com autenticacao, use a extensao "Proxy SwitchyOmega" no Chrome
+echo ou configure o proxy nas configuracoes do sistema (Windows > Proxy).
+echo.
+echo Abrindo mesmo assim — voce precisara autenticar no popup do Chrome.
+echo.` : ''}
+
+start "" "%CHROME%" ^
+  --proxy-server="${proxyStr}" ^
+  --user-data-dir="${profileDir}" ^
+  --incognito ^
+  --no-first-run ^
+  --no-default-browser-check ^
+  --disable-sync ^
+  --window-size=1280,800 ^
+  https://whoer.net
+
+echo Chrome aberto! Verifique o IP no whoer.net
+timeout /t 5 >nul
+`;
+  };
 
   const activeCount = Object.values(sessionStatuses).filter((s) => s === 'ACTIVE').length;
   const launchingCount = Object.values(sessionStatuses).filter((s) => s === 'LAUNCHING').length;
 
   // ─── Gera o script .bat para Windows ──────────────────────────────────────
-  const generateWindowsLauncher = (acc: Account): string => {
+  const generateWindowsLauncher = (acc: Account, customProxy?: { host: string; port: string; user: string; pass: string; protocol: string }): string => {
     const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
+    const px = customProxy || { host: acc.proxy.ip, port: String(acc.proxy.port), user: '', pass: '', protocol: acc.proxy.protocol };
     const proxyStr =
-      acc.proxy.protocol === 'SOCKS5'
-        ? `socks5://${acc.proxy.ip}:${acc.proxy.port}`
-        : `${acc.proxy.protocol.toLowerCase()}://${acc.proxy.ip}:${acc.proxy.port}`;
+      px.protocol === 'SOCKS5'
+        ? `socks5://${px.host}:${px.port}`
+        : `http://${px.host}:${px.port}`;
 
     return `@echo off
 chcp 65001 >nul
@@ -295,6 +407,7 @@ pause`;
       {/* Sub Tabs */}
       <div className="flex items-center gap-2 border-b border-[var(--border-color)] pb-2 overflow-x-auto">
         {[
+          { id: 'proxy', label: '⚡ Colar Proxy Rápido (Auto-Preencher)' },
           { id: 'profiles', label: 'Perfis por Conta' },
           { id: 'bulk', label: 'Exportar (AdsPower / GoLogin)' },
           { id: 'tutorial', label: 'Como Funciona' },
@@ -312,6 +425,129 @@ pause`;
           </button>
         ))}
       </div>
+
+      {/* Quick Proxy Paste & Auto-Fill Tab */}
+      {activeTab === 'proxy' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-color)] space-y-5 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[var(--border-color)] pb-4">
+              <div>
+                <h3 className="font-bold text-sm text-[var(--text-primary)] flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  Auto-Preenchimento Inteligente de Proxy
+                </h3>
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  Cole sua linha de proxy no formato <code className="text-indigo-400 font-mono">host:porta:usuario:senha</code> e o sistema irá separar e configurar automaticamente.
+                </p>
+              </div>
+
+              {/* Botão de Exemplo */}
+              <button
+                onClick={() => {
+                  const sample = 'proxy22-br-hz.ipbr.pro:10000:pv6VrLBR:3325U6MY';
+                  setProxyInput(sample);
+                  parseProxy(sample);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all shrink-0"
+              >
+                Colar Exemplo (ipbr.pro)
+              </button>
+            </div>
+
+            {/* Input Box */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-[var(--text-secondary)] flex items-center justify-between">
+                <span>Cole a string completa do seu proxy aqui:</span>
+                <span className="text-[10px] text-[var(--text-muted)] font-mono">Formatos: host:porta:user:pass | host:porta@user:pass</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Ex: proxy22-br-hz.ipbr.pro:10000:pv6VrLBR:3325U6MY"
+                  value={proxyInput}
+                  onChange={(e) => {
+                    setProxyInput(e.target.value);
+                    parseProxy(e.target.value);
+                  }}
+                  className="w-full pl-4 pr-10 py-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs font-mono text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+                />
+                {proxyInput && (
+                  <button
+                    onClick={() => {
+                      setProxyInput('');
+                      setProxyParsed(null);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Parsed Result Display */}
+            {proxyParsed && (
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="p-4 rounded-xl bg-[var(--bg-primary)] border border-indigo-500/30 space-y-3">
+                  <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-2">
+                    <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+                      <Check className="w-4 h-4 text-emerald-400" /> Proxy Reconhecido e Separado com Sucesso!
+                    </span>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
+                      VÁLIDO ✓
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+                    <div className="p-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)]">
+                      <span className="text-[10px] text-[var(--text-muted)] block font-sans">Host / IP</span>
+                      <span className="font-bold text-purple-300 break-all">{proxyParsed.host || '—'}</span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)]">
+                      <span className="text-[10px] text-[var(--text-muted)] block font-sans">Porta</span>
+                      <span className="font-bold text-indigo-300">{proxyParsed.port || '—'}</span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)]">
+                      <span className="text-[10px] text-[var(--text-muted)] block font-sans">Usuário</span>
+                      <span className="font-bold text-emerald-300 break-all">{proxyParsed.user || 'Sem auth'}</span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)]">
+                      <span className="text-[10px] text-[var(--text-muted)] block font-sans">Senha</span>
+                      <span className="font-bold text-amber-300 break-all">{proxyParsed.pass ? '••••••••' : 'Sem auth'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions for parsed proxy */}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <button
+                    onClick={() => {
+                      const script = generateAuthProxyLauncher();
+                      if (!script) return;
+                      const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `chrome_proxy_customizado.bat`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.01]"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar Launcher .bat com este Proxy
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Profiles Grid */}
       {activeTab === 'profiles' && (

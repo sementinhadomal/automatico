@@ -92,10 +92,7 @@ set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
   if exist "C:\\OmniMedia\\tunnel.js" (
-    ${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${ip}" ${port} "${user}" "${pass}" >nul 2>&1
-    set "TUNNEL_READY=1"
-    timeout /t 2 >nul` : ':: sem auth'
-    }
+    ${hasAuth ? `:: Mata proxy antigo se houver\n    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    :: Inicia novo proxy invisível\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${ip}"" ${port} ""${user}"" ""${pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 2 >nul` : ':: sem auth'}
   )
 )
 set "CHROME="
@@ -104,11 +101,7 @@ for %%P in ("%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramF
 )
 if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
 if "%TUNNEL_READY%"=="1" (
-  echo ========================================================
-  echo MANTENHA ESTA JANELA ABERTA ENQUANTO USA O NAVEGADOR!
-  echo O proxy esta rodando. Feche esta janela para encerrar.
-  echo ========================================================
-  start /WAIT "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
   start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
@@ -428,13 +421,10 @@ if %errorlevel%==0 (
 )
 
 if "%TUNNEL_READY%"=="1" (
-  echo Abrindo Chrome via Tunnel SOCKS5 autenticado...
   start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:10899" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else if defined PROXY_HOST (
-  echo Abrindo Chrome via HTTP proxy...
   start "" "%CHROME%" --disable-ipv6 --proxy-server="http://%PROXY_HOST%:%PROXY_PORT%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else (
-  echo Iniciando sem proxy...
   start "" "%CHROME%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 )
 
@@ -473,10 +463,7 @@ set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
   if exist "C:\\OmniMedia\\tunnel.js" (
-${hasAuth ? `    start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" >nul 2>&1
-    set "TUNNEL_READY=1"
-    timeout /t 2 >nul
-    echo Tunnel SOCKS5 ativo na porta ${tunnelPort}` : '    :: Sem autenticacao - nao precisa de tunnel'}
+${hasAuth ? `    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 1 >nul` : '    :: Sem autenticacao'}
   )
 )
 
@@ -491,24 +478,14 @@ for %%P in (
 
 if not defined CHROME (
   echo ERRO: Chrome nao encontrado!
-  pause & exit /b 1
+  timeout /t 3 >nul & exit /b 1
 )
 
 if "%TUNNEL_READY%"=="1" (
-  echo Proxy Autenticado via Tunnel SOCKS5 [127.0.0.1:${tunnelPort}]
   start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  echo Proxy HTTP direto [${px.host}:${px.port}]
   start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
-
-echo.
-echo ========================================================
-echo MANTENHA ESTA JANELA ABERTA ENQUANTO USA O NAVEGADOR!
-echo O tunnel de proxy esta rodando aqui.
-echo Ao fechar esta janela, o proxy sera desconectado.
-echo ========================================================
-pause
 `;
   };
 
@@ -517,19 +494,39 @@ pause
     const accounts_to_open = filteredAccounts.slice(0, 10); // max 10 simultâneos
     const blocks = accounts_to_open.map((acc, i) => {
       const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
-      const proxyStr = `http://${acc.proxy.ip}:${acc.proxy.port}`;
+      const px = parseProxy(acc.proxy);
+      const hasAuth = !!(px.user && px.pass);
+      const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
+
+      let proxySetup = '';
+      let chromeLaunch = '';
+
+      if (hasAuth) {
+        proxySetup = `for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"`;
+        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
+      } else {
+        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
+      }
+
       return `:: Conta ${i + 1}: ${acc.name}
-start "" "%CHROME%" --proxy-server="${proxyStr}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-timeout /t 2 >nul`;
+if not exist "${profileDir}" mkdir "${profileDir}"
+${proxySetup}
+${chromeLaunch}
+timeout /t 1 >nul`;
     });
 
     return `@echo off
 chcp 65001 >nul
-title OmniMedia — Lançador em Lote (${accounts_to_open.length} contas)
-echo Iniciando ${accounts_to_open.length} instâncias do Chrome...
-echo.
 
-:: Detectar Chrome
+if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
+powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://multimedia-saas-platform.vercel.app/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+where node >nul 2>nul
+if %errorlevel% NEQ 0 (
+  echo ERRO: Node.js nao encontrado! Instale o Node.js.
+  timeout /t 5 >nul
+  exit /b 1
+)
+
 set "CHROME="
 for %%P in (
   "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
@@ -541,18 +538,10 @@ for %%P in (
 
 if not defined CHROME (
   echo ERRO: Google Chrome nao encontrado!
-  pause & exit /b 1
+  timeout /t 5 >nul & exit /b 1
 )
 
-:: Criar pastas de perfil
-${filteredAccounts.slice(0, 10).map(acc => `if not exist "C:\\OmniMedia\\Profiles\\${acc.id}" mkdir "C:\\OmniMedia\\Profiles\\${acc.id}"`).join('\n')}
-
-:: Abrir cada Chrome com intervalo de 2s
 ${blocks.join('\n\n')}
-
-echo.
-echo Todas as instâncias foram abertas!
-pause
 `;
   };
 

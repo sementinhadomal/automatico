@@ -77,7 +77,7 @@ const EditProxyModal: React.FC<{
     const profileDir = `C:\\OmniMedia\\Profiles\\${account.id}`;
     const tunnelPort = 10800 + (Math.abs(account.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
     const hasAuth = !!(user && pass);
-    const script = `@echo off\nchcp 65001 >nul\ntitle OmniMedia — ${account.name}\necho Proxy: ${ip}:${port}\necho.\nif not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"\nif not exist "${profileDir}" mkdir "${profileDir}"\nif not exist "C:\\OmniMedia\\tunnel.js" (\n  echo Baixando tunnel.js...\n  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL_INNER}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul\n)\nset "TUNNEL_READY=0"\nwhere node >nul 2>nul\nif %errorlevel%==0 (\n  if exist "C:\\OmniMedia\\tunnel.js" (\n    ${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${ip}" ${port} "${user}" "${pass}" >nul 2>&1\n    set "TUNNEL_READY=1"\n    timeout /t 2 >nul` : ':: sem auth'}\n  )\n)\nset "CHROME="\nfor %%P in ("%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe") do (\n  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"\n)\nif not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)\nif "%TUNNEL_READY%"=="1" (\n  start "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net\n) else (\n  start "" "%CHROME%" --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net\n)\ntimeout /t 3 >nul\n`;
+    const script = `@echo off\nchcp 65001 >nul\ntitle OmniMedia — ${account.name}\necho Proxy: ${ip}:${port}\necho.\nif not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"\nif not exist "${profileDir}" mkdir "${profileDir}"\nif not exist "C:\\OmniMedia\\tunnel.js" (\n  echo Baixando tunnel.js...\n  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL_INNER}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul\n)\nset "TUNNEL_READY=0"\nwhere node >nul 2>nul\nif %errorlevel%==0 (\n  if exist "C:\\OmniMedia\\tunnel.js" (\n    ${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${ip}" ${port} "${user}" "${pass}" >nul 2>&1\n    set "TUNNEL_READY=1"\n    timeout /t 2 >nul` : ':: sem auth'}\n  )\n)\nset "CHROME="\nfor %%P in ("%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe") do (\n  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"\n)\nif not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)\nif "%TUNNEL_READY%"=="1" (\n  echo ========================================================\n  echo MANTENHA ESTA JANELA ABERTA ENQUANTO USA O NAVEGADOR!\n  echo O proxy esta rodando. Feche esta janela para encerrar.\n  echo ========================================================\n  start /WAIT "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net\n) else (\n  start "" "%CHROME%" --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net\n)\n`;
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -482,8 +482,13 @@ if "%TUNNEL_READY%"=="1" (
   start "" "%CHROME%" --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
 
-echo Chrome aberto com sucesso!
-timeout /t 3 >nul
+echo.
+echo ========================================================
+echo MANTENHA ESTA JANELA ABERTA ENQUANTO USA O NAVEGADOR!
+echo O tunnel de proxy esta rodando aqui.
+echo Ao fechar esta janela, o proxy sera desconectado.
+echo ========================================================
+pause
 `;
   };
 

@@ -84,6 +84,7 @@ export default function Home() {
             <AntiDetectBrowserView
               accounts={accounts}
               selectedCategory={selectedCategory}
+              onUpdateAccounts={(updated) => setAccounts(updated)}
             />
           )}
 
@@ -105,13 +106,6 @@ export default function Home() {
             />
           )}
 
-          {activeTab === 'accounts' && (
-            <AccountsView
-              accounts={accounts}
-              selectedCategory={selectedCategory}
-              onUpdateAccounts={(updated) => setAccounts(updated)}
-            />
-          )}
 
           {activeTab === 'library' && (
             <CentralLibraryView 

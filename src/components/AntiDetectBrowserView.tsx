@@ -158,6 +158,91 @@ timeout /t 5 >nul
 `;
   };
 
+  // ─── Lançador Permanente (Lê proxy de C:\OmniMedia\proxy_atual.txt ou pergunta) ──────
+  const generateUniversalLauncher = (): string => {
+    return `@echo off
+chcp 65001 >nul
+title OmniMedia — Lancador Permanente (Anti-Detect Browser)
+
+if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
+if not exist "C:\\OmniMedia\\Profiles" mkdir "C:\\OmniMedia\\Profiles"
+
+set "CHROME="
+for %%P in (
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+) do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
+
+if not defined CHROME (
+  echo ERRO: Chrome nao encontrado no seu computador!
+  pause & exit /b 1
+)
+
+set "SAVED_PROXY="
+if exist "C:\\OmniMedia\\proxy_atual.txt" (
+  set /p SAVED_PROXY=<"C:\\OmniMedia\\proxy_atual.txt"
+)
+
+echo =======================================================
+echo   OmniMedia Anti-Detect Browser (Lancador Permanente)
+echo =======================================================
+echo.
+
+if defined SAVED_PROXY (
+  echo Proxy atualmente salvo: %SAVED_PROXY%
+  echo.
+  echo   [ENTER]           -^> Usar o proxy salvo acima
+  echo   [DIGITAR / COLAR] -^> Trocar para um novo proxy (ex: host:porta:user:pass)
+  echo.
+) else (
+  echo Nenhum proxy salvo encontrado em C:\\OmniMedia\\proxy_atual.txt
+  echo.
+)
+
+set /p NEW_PROXY="Cole o novo proxy (ou aperte ENTER para usar o atual): "
+
+if not "%NEW_PROXY%"=="" (
+  set "PROXY_TO_USE=%NEW_PROXY%"
+  echo %NEW_PROXY%> "C:\\OmniMedia\\proxy_atual.txt"
+  echo.
+  echo [OK] Proxy atualizado e salvo em C:\\OmniMedia\\proxy_atual.txt!
+) else (
+  if defined SAVED_PROXY (
+    set "PROXY_TO_USE=%SAVED_PROXY%"
+  ) else (
+    echo.
+    echo AVISO: Nenhum proxy informado. Abrindo sem proxy...
+    set "PROXY_TO_USE="
+  )
+)
+
+set "PROXY_HOST="
+set "PROXY_PORT="
+if defined PROXY_TO_USE (
+  for /f "tokens=1,2 delims=:" %%A in ("%PROXY_TO_USE%") do (
+    set "PROXY_HOST=%%A"
+    set "PROXY_PORT=%%B"
+  )
+)
+
+echo.
+if defined PROXY_HOST (
+  echo Iniciando Chrome Anonimo com Proxy http://%PROXY_HOST%:%PROXY_PORT%...
+  start "" "%CHROME%" --proxy-server="http://%PROXY_HOST%:%PROXY_PORT%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
+) else (
+  echo Iniciando Chrome Anonimo...
+  start "" "%CHROME%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
+)
+
+echo.
+echo Chrome aberto!
+timeout /t 4 >nul
+`;
+  };
+
   const activeCount = Object.values(sessionStatuses).filter((s) => s === 'ACTIVE').length;
   const launchingCount = Object.values(sessionStatuses).filter((s) => s === 'LAUNCHING').length;
 
@@ -522,26 +607,57 @@ pause`;
                 </div>
 
                 {/* Actions for parsed proxy */}
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <button
-                    onClick={() => {
-                      const script = generateAuthProxyLauncher();
-                      if (!script) return;
-                      const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `chrome_proxy_customizado.bat`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
-                    }}
-                    className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.01]"
-                  >
-                    <Download className="w-4 h-4" />
-                    Baixar Launcher .bat com este Proxy
-                  </button>
+                <div className="space-y-3 pt-2">
+                  <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
+                    <span className="font-bold text-xs text-indigo-300 block">💡 Solução Definitiva: Lançador Permanente (Baixe Apenas 1 Vez)</span>
+                    <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                      Baixe o <strong>Lançador Permanente</strong> (<code className="text-indigo-400 font-mono">abrir_chrome_permanente.bat</code>) para a sua Área de Trabalho. Quando quiser trocar de proxy, você tem 2 opções sem precisar baixar o script de novo:
+                    </p>
+                    <ul className="text-xs text-[var(--text-muted)] space-y-1 list-disc list-inside font-mono text-[11px]">
+                      <li><strong>Opção 1:</strong> Ao dar duplo clique no script, cole a nova linha de proxy na janela preta.</li>
+                      <li><strong>Opção 2:</strong> Clique no botão <span className="text-emerald-400 font-semibold">↓ Salvar Config (proxy_atual.txt)</span> abaixo e salve na pasta <code className="bg-black/30 px-1 rounded">C:\OmniMedia\</code>.</li>
+                    </ul>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row items-center gap-3">
+                    <button
+                      onClick={() => {
+                        const script = generateUniversalLauncher();
+                        const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `abrir_chrome_permanente.bat`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="w-full md:w-1/2 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.01]"
+                    >
+                      <Download className="w-4 h-4" />
+                      Baixar Lançador Permanente (1x Só)
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (!proxyInput) return;
+                        const blob = new Blob([proxyInput.trim()], { type: 'text/plain;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `proxy_atual.txt`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="w-full md:w-1/2 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.01]"
+                    >
+                      <FileCode2 className="w-4 h-4" />
+                      Salvar Config (proxy_atual.txt)
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

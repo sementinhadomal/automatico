@@ -221,16 +221,25 @@ if not "%NEW_PROXY%"=="" (
 
 set "PROXY_HOST="
 set "PROXY_PORT="
+set "PROXY_USER="
+set "PROXY_PASS="
+
 if defined PROXY_TO_USE (
-  for /f "tokens=1,2 delims=:" %%A in ("%PROXY_TO_USE%") do (
+  for /f "tokens=1,2,3,4 delims=:" %%A in ("%PROXY_TO_USE%") do (
     set "PROXY_HOST=%%A"
     set "PROXY_PORT=%%B"
+    set "PROXY_USER=%%C"
+    set "PROXY_PASS=%%D"
   )
 )
 
 echo.
 if defined PROXY_HOST (
-  echo Iniciando Chrome Anonimo com Proxy http://%PROXY_HOST%:%PROXY_PORT%...
+  echo Iniciando Chrome Anonimo com Proxy HTTP: http://%PROXY_HOST%:%PROXY_PORT%...
+  if defined PROXY_USER (
+    echo Usuario: %PROXY_USER%
+    echo (Se o Chrome solicitar autenticacao ao abrir, digite o usuario e senha)
+  )
   start "" "%CHROME%" --proxy-server="http://%PROXY_HOST%:%PROXY_PORT%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else (
   echo Iniciando Chrome Anonimo...
@@ -238,7 +247,7 @@ if defined PROXY_HOST (
 )
 
 echo.
-echo Chrome aberto!
+echo Chrome aberto com sucesso!
 timeout /t 4 >nul
 `;
   };
@@ -249,11 +258,8 @@ timeout /t 4 >nul
   // ─── Gera o script .bat para Windows ──────────────────────────────────────
   const generateWindowsLauncher = (acc: Account, customProxy?: { host: string; port: string; user: string; pass: string; protocol: string }): string => {
     const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
-    const px = customProxy || { host: acc.proxy.ip, port: String(acc.proxy.port), user: '', pass: '', protocol: acc.proxy.protocol };
-    const proxyStr =
-      px.protocol === 'SOCKS5'
-        ? `socks5://${px.host}:${px.port}`
-        : `http://${px.host}:${px.port}`;
+    const px = customProxy || { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: 'HTTP' };
+    const proxyStr = `http://${px.host}:${px.port}`;
 
     return `@echo off
 chcp 65001 >nul
@@ -308,10 +314,7 @@ timeout /t 3 >nul
     const accounts_to_open = filteredAccounts.slice(0, 10); // max 10 simultâneos
     const blocks = accounts_to_open.map((acc, i) => {
       const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
-      const proxyStr =
-        acc.proxy.protocol === 'SOCKS5'
-          ? `socks5://${acc.proxy.ip}:${acc.proxy.port}`
-          : `${acc.proxy.protocol.toLowerCase()}://${acc.proxy.ip}:${acc.proxy.port}`;
+      const proxyStr = `http://${acc.proxy.ip}:${acc.proxy.port}`;
       return `:: Conta ${i + 1}: ${acc.name}
 start "" "%CHROME%" --proxy-server="${proxyStr}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 timeout /t 2 >nul`;

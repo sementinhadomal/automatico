@@ -77,7 +77,42 @@ const EditProxyModal: React.FC<{
     const profileDir = `C:\\OmniMedia\\Profiles\\${account.id}`;
     const tunnelPort = 10800 + (Math.abs(account.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
     const hasAuth = !!(user && pass);
-    const script = `@echo off\nchcp 65001 >nul\ntitle OmniMedia — ${account.name}\necho Proxy: ${ip}:${port}\necho.\nif not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"\nif not exist "${profileDir}" mkdir "${profileDir}"\nif not exist "C:\\OmniMedia\\tunnel.js" (\n  echo Baixando tunnel.js...\n  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL_INNER}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul\n)\nset "TUNNEL_READY=0"\nwhere node >nul 2>nul\nif %errorlevel%==0 (\n  if exist "C:\\OmniMedia\\tunnel.js" (\n    ${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${ip}" ${port} "${user}" "${pass}" >nul 2>&1\n    set "TUNNEL_READY=1"\n    timeout /t 2 >nul` : ':: sem auth'}\n  )\n)\nset "CHROME="\nfor %%P in ("%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe") do (\n  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"\n)\nif not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)\nif "%TUNNEL_READY%"=="1" (\n  echo ========================================================\n  echo MANTENHA ESTA JANELA ABERTA ENQUANTO USA O NAVEGADOR!\n  echo O proxy esta rodando. Feche esta janela para encerrar.\n  echo ========================================================\n  start /WAIT "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net\n) else (\n  start "" "%CHROME%" --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net\n)\n`;
+    const script = `@echo off
+chcp 65001 >nul
+title OmniMedia — ${account.name}
+echo Proxy: ${ip}:${port}
+echo.
+if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
+if not exist "${profileDir}" mkdir "${profileDir}"
+
+echo Atualizando tunnel proxy...
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL_INNER}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+
+set "TUNNEL_READY=0"
+where node >nul 2>nul
+if %errorlevel%==0 (
+  if exist "C:\\OmniMedia\\tunnel.js" (
+    ${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${ip}" ${port} "${user}" "${pass}" >nul 2>&1
+    set "TUNNEL_READY=1"
+    timeout /t 2 >nul` : ':: sem auth'
+    }
+  )
+)
+set "CHROME="
+for %%P in ("%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe") do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
+if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
+if "%TUNNEL_READY%"=="1" (
+  echo ========================================================
+  echo MANTENHA ESTA JANELA ABERTA ENQUANTO USA O NAVEGADOR!
+  echo O proxy esta rodando. Feche esta janela para encerrar.
+  echo ========================================================
+  start /WAIT "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+) else (
+  start "" "%CHROME%" --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+)
+`;
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -257,14 +292,9 @@ echo.
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
 
-:: Baixar tunnel.js do servidor (apenas 1 vez)
-if not exist "C:\\OmniMedia\\tunnel.js" (
-  echo Baixando tunnel.js do servidor...
-  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
-  if not exist "C:\\OmniMedia\\tunnel.js" (
-    echo AVISO: Nao foi possivel baixar tunnel.js. Usando proxy direto...
-  )
-)
+:: Baixar tunnel.js do servidor
+echo Atualizando tunnel proxy...
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
 
 set "CHROME="
 for %%P in (
@@ -313,16 +343,9 @@ title OmniMedia — Lancador Permanente (Anti-Detect Browser)
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "C:\\OmniMedia\\Profiles" mkdir "C:\\OmniMedia\\Profiles"
 
-:: Baixar tunnel.js do servidor se nao existir (apenas 1 vez)
-if not exist "C:\\OmniMedia\\tunnel.js" (
-  echo Baixando tunnel.js do servidor...
-  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
-  if exist "C:\\OmniMedia\\tunnel.js" (
-    echo tunnel.js baixado com sucesso!
-  ) else (
-    echo AVISO: Nao foi possivel baixar tunnel.js. Continuando sem tunnel...
-  )
-)
+:: Baixar tunnel.js do servidor
+echo Atualizando tunnel proxy...
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
 
 set "CHROME="
 for %%P in (
@@ -443,11 +466,8 @@ echo.
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
 
-:: Baixar tunnel.js do servidor se ainda nao existir (apenas 1 vez)
-if not exist "C:\\OmniMedia\\tunnel.js" (
-  echo Baixando tunnel.js...
-  powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
-)
+echo Atualizando tunnel proxy...
+powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://multimedia-saas-platform.vercel.app/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
 
 set "TUNNEL_READY=0"
 where node >nul 2>nul

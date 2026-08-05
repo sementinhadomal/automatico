@@ -8,63 +8,117 @@ const proxyUser = process.argv[5] || '';
 const proxyPass = process.argv[6] || '';
 
 const server = net.createServer((clientSocket) => {
-  const targetSocket = new net.Socket();
+  let clientState = 'WAIT_GREETING'; // WAIT_GREETING -> WAIT_CONNECT -> RELAY
+  let upstreamState = 'INIT'; // INIT -> WAIT_GREETING_REPLY -> WAIT_AUTH_REPLY -> RELAY
+  
+  let targetSocket = null;
+  let clientBuffer = Buffer.alloc(0);
+  let upstreamBuffer = Buffer.alloc(0);
 
-  targetSocket.connect(targetPort, targetHost, () => {
-    // SOCKS5 Greeting: 0x05 (version), 0x02 (methods count), 0x00 (no auth), 0x02 (user/pass)
-    targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]));
-  });
-
-  let state = 'GREETING';
-
-  targetSocket.on('data', (data) => {
-    if (state === 'GREETING') {
-      const chosenMethod = data[1];
-      if (chosenMethod === 0x02 && proxyUser) {
-        // User/Pass Auth Method
-        const userBuf = Buffer.from(proxyUser);
-        const passBuf = Buffer.from(proxyPass);
-        const authReq = Buffer.concat([
-          Buffer.from([0x01, userBuf.length]),
-          userBuf,
-          Buffer.from([passBuf.length]),
-          passBuf,
-        ]);
-        state = 'AUTH';
-        targetSocket.write(authReq);
-      } else if (chosenMethod === 0x00) {
-        // No Auth Method
-        state = 'CONNECTED';
-        clientSocket.write(Buffer.from([0x05, 0x00]));
-        clientSocket.pipe(targetSocket);
-        targetSocket.pipe(clientSocket);
-      } else {
-        clientSocket.destroy();
-      }
-    } else if (state === 'AUTH') {
-      const status = data[1];
-      if (status === 0x00) {
-        // Auth Successful
-        state = 'CONNECTED';
-        clientSocket.write(Buffer.from([0x05, 0x00]));
-        clientSocket.pipe(targetSocket);
-        targetSocket.pipe(clientSocket);
-      } else {
-        console.error('Proxy Authentication Failed!');
-        clientSocket.destroy();
-        targetSocket.destroy();
-      }
-    }
-  });
+  const fail = () => {
+    clientSocket.destroy();
+    if (targetSocket) targetSocket.destroy();
+  };
 
   clientSocket.on('data', (data) => {
-    if (state === 'GREETING' && data[0] === 0x05) {
-      // Intercept client SOCKS5 handshake
+    if (clientState === 'RELAY') {
+      if (targetSocket) targetSocket.write(data);
+      return;
+    }
+    clientBuffer = Buffer.concat([clientBuffer, data]);
+    
+    if (clientState === 'WAIT_GREETING') {
+      if (clientBuffer.length >= 2) {
+        const numMethods = clientBuffer[1];
+        if (clientBuffer.length >= 2 + numMethods) {
+          // Recebeu o greeting completo do Chrome
+          clientBuffer = clientBuffer.slice(2 + numMethods);
+          clientState = 'WAIT_CONNECT';
+          
+          // Agora conecta no proxy real
+          targetSocket = new net.Socket();
+          targetSocket.on('error', fail);
+          targetSocket.on('data', onUpstreamData);
+          
+          targetSocket.connect(targetPort, targetHost, () => {
+            upstreamState = 'WAIT_GREETING_REPLY';
+            // Manda o Greeting pro proxy real: Suporta no-auth(0x00) e user/pass(0x02)
+            targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]));
+          });
+        }
+      }
+    } else if (clientState === 'WAIT_CONNECT') {
+      // Chrome mandou dados cedo demais, fica no buffer
     }
   });
 
-  clientSocket.on('error', () => targetSocket.destroy());
-  targetSocket.on('error', () => clientSocket.destroy());
+  const onUpstreamData = (data) => {
+    if (upstreamState === 'RELAY') {
+      clientSocket.write(data);
+      return;
+    }
+    upstreamBuffer = Buffer.concat([upstreamBuffer, data]);
+    
+    if (upstreamState === 'WAIT_GREETING_REPLY') {
+      if (upstreamBuffer.length >= 2) {
+        const chosenMethod = upstreamBuffer[1];
+        upstreamBuffer = upstreamBuffer.slice(2);
+        
+        if (chosenMethod === 0x02 && proxyUser) {
+          upstreamState = 'WAIT_AUTH_REPLY';
+          const userBuf = Buffer.from(proxyUser);
+          const passBuf = Buffer.from(proxyPass);
+          const authReq = Buffer.concat([
+            Buffer.from([0x01, userBuf.length]),
+            userBuf,
+            Buffer.from([passBuf.length]),
+            passBuf,
+          ]);
+          targetSocket.write(authReq);
+        } else if (chosenMethod === 0x00) {
+          upstreamReady();
+        } else {
+          console.error('Proxy upstream recusou metodos suportados');
+          fail();
+        }
+      }
+    }
+    
+    if (upstreamState === 'WAIT_AUTH_REPLY') {
+      if (upstreamBuffer.length >= 2) {
+        const status = upstreamBuffer[1];
+        upstreamBuffer = upstreamBuffer.slice(2);
+        
+        if (status === 0x00) {
+          upstreamReady();
+        } else {
+          console.error('Falha na autenticacao do proxy');
+          fail();
+        }
+      }
+    }
+  };
+
+  const upstreamReady = () => {
+    upstreamState = 'RELAY';
+    clientState = 'RELAY';
+    // Diz pro Chrome: "Greeting aceito, sem auth (pq nos ja autenticamos upstream)"
+    clientSocket.write(Buffer.from([0x05, 0x00]));
+    
+    // Se o Chrome ja mandou o Connect Request na fila, envia
+    if (clientBuffer.length > 0) {
+      targetSocket.write(clientBuffer);
+      clientBuffer = Buffer.alloc(0);
+    }
+    
+    // Se o proxy mandou algo a mais (improvavel), manda pro Chrome
+    if (upstreamBuffer.length > 0) {
+      clientSocket.write(upstreamBuffer);
+      upstreamBuffer = Buffer.alloc(0);
+    }
+  };
+
+  clientSocket.on('error', fail);
 });
 
 server.listen(localPort, '127.0.0.1', () => {

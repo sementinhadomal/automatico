@@ -494,7 +494,7 @@ if "%TUNNEL_READY%"=="1" (
     const accounts_to_open = filteredAccounts.slice(0, 10); // max 10 simultâneos
     const blocks = accounts_to_open.map((acc, i) => {
       const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
-      const px = parseProxy(acc.proxy);
+      const px = { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '' };
       const hasAuth = !!(px.user && px.pass);
       const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
 

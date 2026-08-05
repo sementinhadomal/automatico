@@ -108,9 +108,9 @@ if "%TUNNEL_READY%"=="1" (
   echo MANTENHA ESTA JANELA ABERTA ENQUANTO USA O NAVEGADOR!
   echo O proxy esta rodando. Feche esta janela para encerrar.
   echo ========================================================
-  start /WAIT "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start /WAIT "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  start "" "%CHROME%" --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
 `;
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
@@ -429,10 +429,10 @@ if %errorlevel%==0 (
 
 if "%TUNNEL_READY%"=="1" (
   echo Abrindo Chrome via Tunnel SOCKS5 autenticado...
-  start "" "%CHROME%" --proxy-server="socks5://127.0.0.1:10899" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:10899" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else if defined PROXY_HOST (
   echo Abrindo Chrome via HTTP proxy...
-  start "" "%CHROME%" --proxy-server="http://%PROXY_HOST%:%PROXY_PORT%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://%PROXY_HOST%:%PROXY_PORT%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else (
   echo Iniciando sem proxy...
   start "" "%CHROME%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --incognito --no-first-run --no-default-browser-check --disable-sync https://whoer.net
@@ -496,10 +496,10 @@ if not defined CHROME (
 
 if "%TUNNEL_READY%"=="1" (
   echo Proxy Autenticado via Tunnel SOCKS5 [127.0.0.1:${tunnelPort}]
-  start "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
   echo Proxy HTTP direto [${px.host}:${px.port}]
-  start "" "%CHROME%" --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --incognito --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
 
 echo.

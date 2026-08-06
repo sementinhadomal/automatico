@@ -119,8 +119,9 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-echo Conectando Chrome via AdsPower Engine (${proxyScheme.toUpperCase()}://${px.host}:${px.port})...
-${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --load-extension="${extDir}" --disable-extensions-except="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
+echo Conectando Chrome via AdsPower Engine (${proxyScheme.toUpperCase()}://${px.host}:${parsedPort})...
+${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
+
 
 echo.
 echo ============================================

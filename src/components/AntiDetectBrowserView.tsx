@@ -92,7 +92,13 @@ set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
   if exist "C:\\OmniMedia\\tunnel.js" (
-    ${hasAuth ? `:: Mata proxy antigo se houver\n    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    :: Inicia novo proxy invisível\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${ip}"" ${port} ""${user}"" ""${pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 2 >nul` : ':: sem auth'}
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1
+    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"
+    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${ip}"" ${port}${hasAuth ? ` ""${user}"" ""${pass}""` : ''}", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"
+    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1
+    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"
+    set "TUNNEL_READY=1"
+    timeout /t 3 >nul
   )
 )
 set "CHROME="
@@ -103,7 +109,7 @@ if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
 if "%TUNNEL_READY%"=="1" (
   start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
 `;
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });

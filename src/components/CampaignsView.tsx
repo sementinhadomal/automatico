@@ -49,7 +49,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [timeSlots, setTimeSlots] = useState<string>('09:00, 15:00, 21:00');
 
   // Platform Selection
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['instagram', 'tiktok']);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['instagram', 'tiktok', 'youtube_shorts', 'x_twitter']);
 
   const togglePlatform = (platformId: string) => {
     setSelectedPlatforms((prev) =>
@@ -63,6 +63,7 @@ export const CampaignsView: React.FC<CampaignsViewProps> = ({
     { id: 'instagram', label: 'Instagram Reels', icon: '📸', color: 'from-pink-600 to-purple-600', border: 'border-pink-500/40', bg: 'bg-pink-500/10', text: 'text-pink-400' },
     { id: 'tiktok', label: 'TikTok Vídeo', icon: '🎵', color: 'from-slate-900 to-slate-800', border: 'border-slate-400/40', bg: 'bg-slate-700/20', text: 'text-slate-300' },
     { id: 'youtube_shorts', label: 'YouTube Shorts', icon: '▶️', color: 'from-red-700 to-red-600', border: 'border-red-500/40', bg: 'bg-red-500/10', text: 'text-red-400' },
+    { id: 'x_twitter', label: 'X (Twitter)', icon: '𝕏', color: 'from-blue-900 to-blue-800', border: 'border-blue-500/40', bg: 'bg-blue-500/10', text: 'text-blue-400' },
   ];
   
   const [isGenerating, setIsGenerating] = useState<boolean>(false);

@@ -43,13 +43,51 @@ function buildBatScript(acc: Account, px: { host: string; port: string; user: st
   const extDir = `${profileDir}\\proxy_ext`;
   const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
   const cdpPort = tunnelPort + 1000;
+
+  // Se não tem proxy configurado, abre com IP direto do computador
+  const hasProxy = !!(px.host && px.host.trim() && px.host !== 'sem-proxy');
+
+  if (!hasProxy) {
+    return `@echo off
+chcp 65001 >nul
+title OmniMedia — ${acc.name} (${acc.country}) — IP Direto
+echo ============================================
+echo   Abrindo Chrome: ${acc.name}
+echo   Pais: ${acc.country} - SEM PROXY (IP real do computador)
+echo ============================================
+echo.
+
+if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
+if not exist "${profileDir}" mkdir "${profileDir}"
+
+set "CHROME="
+for %%P in (
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+) do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
+
+if not defined CHROME (
+  echo ERRO: Google Chrome nao foi encontrado!
+  pause & exit /b 1
+)
+
+start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+
+echo.
+echo Chrome aberto com IP direto do computador!
+timeout /t 3 >nul
+`;
+  }
+
+  // Com proxy configurado — usa AdsPower Extension Engine
   const hasAuth = !!(px.user && px.pass);
   const cleanPort = String(px.port).trim();
   const isSocks = cleanPort === '49156' || (px.protocol && px.protocol.toUpperCase() === 'SOCKS5' && cleanPort !== '49155');
   const proxyScheme = (cleanPort === '49155' || !isSocks) ? 'http' : 'socks5';
   const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
-
-
 
   // Manifest V2 Chrome extension (identical to AdsPower / GoLogin)
   const manifestObj = {
@@ -93,7 +131,7 @@ chcp 65001 >nul
 title OmniMedia — ${acc.name} (${acc.country})
 echo ============================================
 echo   Abrindo Chrome: ${acc.name}
-echo   Pais: ${acc.country} - Proxy: ${px.host}:${px.port}
+echo   Pais: ${acc.country} - Proxy: ${px.host}:${parsedPort}
 echo ============================================
 echo.
 
@@ -606,13 +644,23 @@ timeout /t 4 >nul
       const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
       const extDir = `${profileDir}\\proxy_ext`;
       const px = { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: acc.proxy.protocol || 'http' };
-      const hasAuth = !!(px.user && px.pass);
       const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
       const cdpPort = tunnelPort + 1000;
       const cleanPort = String(px.port).trim();
-      const isSocks = cleanPort === '49156';
-      const proxyScheme = cleanPort === '49155' ? 'http' : (isSocks ? 'socks5' : 'http');
-      const parsedPort = parseInt(cleanPort, 10) || 49155;
+      const hasProxy = !!(px.host && px.host.trim() && px.host !== 'sem-proxy');
+
+      if (!hasProxy) {
+        const chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
+        return `:: Conta ${i + 1}: ${acc.name} (IP Direto)
+if not exist "${profileDir}" mkdir "${profileDir}"
+${chromeLaunch}
+timeout /t 1 >nul`;
+      }
+
+      const hasAuth = !!(px.user && px.pass);
+      const isSocks = cleanPort === '49156' || (px.protocol && px.protocol.toUpperCase() === 'SOCKS5' && cleanPort !== '49155');
+      const proxyScheme = (cleanPort === '49155' || !isSocks) ? 'http' : 'socks5';
+      const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
 
       const manifestObj = {
         version: '1.0.0', manifest_version: 2, name: 'OmniMedia AdsPower Engine',
@@ -773,72 +821,31 @@ pause`;
         </div>
       </div>
 
-      {/* 🔥 Aplicar Proxy a Todos os Perfis */}
-      {(() => {
-        const hasStaleProxy = filteredAccounts.some(a => a.proxy.ip === '185.220.101.5' || a.proxy.ip === '185.220.101.6' || a.proxy.ip === '185.220.101.7' || !a.proxy.username);
-        return (
-          <div className={`p-4 rounded-2xl border text-xs space-y-3 ${hasStaleProxy ? 'bg-rose-500/5 border-rose-500/30' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
-            <div className="flex items-center gap-2">
-              <span className="text-base">{hasStaleProxy ? '🚨' : '✅'}</span>
-              <p className={`font-bold ${hasStaleProxy ? 'text-rose-300' : 'text-emerald-300'}`}>
-                {hasStaleProxy ? 'Proxies não configurados — cole o seu proxy real abaixo!' : 'Proxy aplicado a todos os perfis'}
-              </p>
-            </div>
-            <div className="flex gap-2 items-center">
-              <input
-                id="global-proxy-input"
-                type="text"
-                placeholder="Cole aqui: 82.140.183.78:49155:thaisrafipv:KxjbNhyGPj"
-                defaultValue=""
-                className="flex-1 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
-              />
-              <button
-                onClick={() => {
-                  const val = (document.getElementById('global-proxy-input') as HTMLInputElement)?.value?.trim();
-                  if (!val) return;
-                  const parts = val.replace(/^(socks5|socks4|https?):\/\//, '').split(':');
-                  let host = '', port = '', user = '', pass = '';
-                  if (val.includes('@')) {
-                    const [cred, hostpart] = val.split('@');
-                    [user, pass] = cred.split(':');
-                    [host, port] = hostpart.split(':');
-                  } else if (parts.length >= 4) {
-                    [host, port, user, pass] = parts;
-                  } else if (parts.length === 2) {
-                    [host, port] = parts;
-                  }
-                  if (!host || !port) { alert('Formato inválido! Use: ip:porta:usuario:senha'); return; }
-                  const parsedPort = parseInt(port) || 49155;
-                  const protocol = (port === '49156' || port === '1080') ? 'SOCKS5' : 'HTTP';
-                  const updated = accounts.map(a => ({
-                    ...a,
-                    proxy: { ...a.proxy, ip: host, port: parsedPort, username: user, password: pass, protocol: protocol as import('@/types').ProxyProtocol, status: 'ACTIVE' as const, latencyMs: 45 }
-                  }));
-                  onUpdateAccounts(updated);
-                  alert(`✅ Proxy ${protocol}://${host}:${parsedPort} aplicado a todos os ${accounts.length} perfis!`);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs transition-all whitespace-nowrap shadow-lg"
-              >
-                ⚡ Aplicar a Todos
-              </button>
-              <button
-                onClick={() => {
-                  if (!confirm('Isso vai limpar todos os dados salvos e restaurar os perfis padrão com o proxy correto. Continuar?')) return;
-                  localStorage.removeItem('omni_media_accounts');
-                  window.location.reload();
-                }}
-                className="px-3 py-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 font-bold text-xs transition-all whitespace-nowrap"
-                title="Restaurar perfis padrão (limpa localStorage)"
-              >
-                🔄 Resetar
-              </button>
-            </div>
-            <p className="text-[var(--text-muted)] text-[10px] font-mono">
-              Formato aceito: <span className="text-purple-400">ip:porta:usuario:senha</span> — Ex: 82.140.183.78:49155:thaisrafipv:KxjbNhyGPj
+      {/* ℹ️ Info — Modelo AdsPower */}
+      <div className="flex items-start justify-between gap-3 p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 text-xs">
+        <div className="flex items-start gap-3">
+          <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-indigo-300">Modelo AdsPower — IP Direto por padrão</p>
+            <p className="text-[var(--text-secondary)] leading-relaxed">
+              Perfis <strong>sem proxy</strong> abrem com o IP real do seu computador.
+              Clique em <span className="text-amber-400 font-semibold">⚡ Proxy</span> em qualquer card para adicionar um proxy específico àquele perfil.
+              Ao salvar, o launcher <code className="bg-black/30 px-1 rounded">.bat</code> desse perfil já usa o proxy novo.
             </p>
           </div>
-        );
-      })()}
+        </div>
+        <button
+          onClick={() => {
+            if (!confirm('Limpar dados salvos e restaurar perfis padrão (sem proxy)?')) return;
+            localStorage.removeItem('omni_media_accounts');
+            window.location.reload();
+          }}
+          className="px-3 py-1.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 font-bold text-xs transition-all whitespace-nowrap shrink-0"
+          title="Limpa localStorage e restaura perfis padrão sem proxy"
+        >
+          🔄 Resetar Perfis
+        </button>
+      </div>
 
 
       {/* Status Bar */}
@@ -1330,7 +1337,11 @@ pause`;
                   <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs">
                     <div>
                       <span className="text-[var(--text-muted)] text-[10px] block">Proxy</span>
-                      <span className="font-mono font-bold text-purple-400">{acc.proxy.ip}:{acc.proxy.port}</span>
+                      {(!acc.proxy.ip || acc.proxy.ip === 'sem-proxy') ? (
+                        <span className="font-mono font-bold text-amber-500">IP Direto</span>
+                      ) : (
+                        <span className="font-mono font-bold text-purple-400">{acc.proxy.ip}:{acc.proxy.port}</span>
+                      )}
                     </div>
                     <div>
                       <span className="text-[var(--text-muted)] text-[10px] block">Protocolo</span>

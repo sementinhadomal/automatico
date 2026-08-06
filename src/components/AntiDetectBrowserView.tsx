@@ -103,7 +103,7 @@ if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
 if "%TUNNEL_READY%"=="1" (
   start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  start "" "%CHROME%" --disable-ipv6 --proxy-server="${account.proxy.protocol.toLowerCase()}://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
 `;
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
@@ -484,7 +484,7 @@ if not defined CHROME (
 if "%TUNNEL_READY%"=="1" (
   start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  start "" "%CHROME%" --disable-ipv6 --proxy-server="${acc.proxy.protocol ? acc.proxy.protocol.toLowerCase() : 'http'}://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
 `;
   };
@@ -505,7 +505,7 @@ if "%TUNNEL_READY%"=="1" (
         proxySetup = `for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"`;
         chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
       } else {
-        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --proxy-server="${px.protocol.toLowerCase()}://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
+        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
       }
 
       return `:: Conta ${i + 1}: ${acc.name}

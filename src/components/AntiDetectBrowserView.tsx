@@ -89,12 +89,12 @@ timeout /t 3 >nul
   const proxyScheme = (cleanPort === '49155' || !isSocks) ? 'http' : 'socks5';
   const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
 
-  // Manifest V3 Chrome extension
+  // Manifest V3 Chrome extension (Auth only)
   const manifestObj = {
     version: '1.0.0',
     manifest_version: 3,
     name: 'OmniMedia AdsPower Engine',
-    permissions: ['proxy', 'webRequest', 'webRequestAuthProvider'],
+    permissions: ['webRequest', 'webRequestAuthProvider'],
     host_permissions: ['<all_urls>'],
     background: { service_worker: 'background.js' }
   };
@@ -108,22 +108,6 @@ chrome.webRequest.onAuthRequired.addListener(
   { urls: ["<all_urls>"] },
   ["asyncBlocking"]
 );
-
-var config = {
-  mode: "fixed_servers",
-  rules: {
-    singleProxy: {
-      scheme: "${proxyScheme}",
-      host: "${px.host}",
-      port: ${parsedPort}
-    },
-    bypassList: ["<-loopback>"]
-  }
-};
-
-chrome.proxy.settings.set({ value: config, scope: "regular" }, function() {
-  console.log("OmniMedia AdsPower Proxy Engine Active");
-});
 `;
   const bgB64 = Buffer.from(bgScript).toString('base64');
 
@@ -162,7 +146,7 @@ if not defined CHROME (
 )
 
 echo Conectando Chrome via AdsPower Engine (${proxyScheme.toUpperCase()}://${px.host}:${parsedPort})...
-${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
+${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
 
 
 echo.
@@ -665,12 +649,12 @@ timeout /t 1 >nul`;
 
       const manifestObj = {
         version: '1.0.0', manifest_version: 3, name: 'OmniMedia AdsPower Engine',
-        permissions: ['proxy', 'webRequest', 'webRequestAuthProvider'],
+        permissions: ['webRequest', 'webRequestAuthProvider'],
         host_permissions: ['<all_urls>'],
         background: { service_worker: 'background.js' }
       };
       const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
-      const bgScript = `chrome.webRequest.onAuthRequired.addListener(function(d, callback){callback({authCredentials:{username:"${px.user}",password:"${px.pass}"}});},{urls:["<all_urls>"]},["asyncBlocking"]);chrome.proxy.settings.set({value:{mode:"fixed_servers",rules:{singleProxy:{scheme:"${proxyScheme}",host:"${px.host}",port:${parsedPort}},bypassList:["<-loopback>"]}},scope:"regular"},function(){});`;
+      const bgScript = `chrome.webRequest.onAuthRequired.addListener(function(d, callback){callback({authCredentials:{username:"${px.user}",password:"${px.pass}"}});},{urls:["<all_urls>"]},["asyncBlocking"]);`;
       const bgB64 = Buffer.from(bgScript).toString('base64');
 
       const extSetup = hasAuth ? `if not exist "${extDir}" mkdir "${extDir}"
@@ -678,7 +662,7 @@ powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.C
 powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Set-Content -Path '${extDir}\\background.js' -Encoding Ascii" 2>nul` : '';
 
       const chromeLaunch = hasAuth
-        ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`
+        ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`
         : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
 
       return `:: Conta ${i + 1}: ${acc.name}

@@ -773,19 +773,73 @@ pause`;
         </div>
       </div>
 
-      {/* ⚠️ Aviso importante */}
-      <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-xs">
-        <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-bold text-amber-300">Como usar o Navegador Anti-Detect</p>
-          <p className="text-[var(--text-secondary)] leading-relaxed">
-            Por limitações de segurança do browser, não é possível abrir programas do computador diretamente por um site. 
-            Clique em <span className="text-emerald-400 font-semibold">↓ Baixar Launcher</span> para obter o arquivo <code className="bg-black/30 px-1 rounded">.bat</code> da conta.
-            Dê <strong>duplo clique</strong> no arquivo baixado para abrir o Chrome com o proxy configurado.
-            Salve os launchers em <code className="bg-black/30 px-1 rounded">C:\OmniMedia\Launchers\</code> para não precisar baixar novamente.
-          </p>
-        </div>
-      </div>
+      {/* 🔥 Aplicar Proxy a Todos os Perfis */}
+      {(() => {
+        const hasStaleProxy = filteredAccounts.some(a => a.proxy.ip === '185.220.101.5' || a.proxy.ip === '185.220.101.6' || a.proxy.ip === '185.220.101.7' || !a.proxy.username);
+        return (
+          <div className={`p-4 rounded-2xl border text-xs space-y-3 ${hasStaleProxy ? 'bg-rose-500/5 border-rose-500/30' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-base">{hasStaleProxy ? '🚨' : '✅'}</span>
+              <p className={`font-bold ${hasStaleProxy ? 'text-rose-300' : 'text-emerald-300'}`}>
+                {hasStaleProxy ? 'Proxies não configurados — cole o seu proxy real abaixo!' : 'Proxy aplicado a todos os perfis'}
+              </p>
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                id="global-proxy-input"
+                type="text"
+                placeholder="Cole aqui: 82.140.183.78:49155:thaisrafipv:KxjbNhyGPj"
+                defaultValue=""
+                className="flex-1 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
+              />
+              <button
+                onClick={() => {
+                  const val = (document.getElementById('global-proxy-input') as HTMLInputElement)?.value?.trim();
+                  if (!val) return;
+                  const parts = val.replace(/^(socks5|socks4|https?):\/\//, '').split(':');
+                  let host = '', port = '', user = '', pass = '';
+                  if (val.includes('@')) {
+                    const [cred, hostpart] = val.split('@');
+                    [user, pass] = cred.split(':');
+                    [host, port] = hostpart.split(':');
+                  } else if (parts.length >= 4) {
+                    [host, port, user, pass] = parts;
+                  } else if (parts.length === 2) {
+                    [host, port] = parts;
+                  }
+                  if (!host || !port) { alert('Formato inválido! Use: ip:porta:usuario:senha'); return; }
+                  const parsedPort = parseInt(port) || 49155;
+                  const protocol = (port === '49156' || port === '1080') ? 'SOCKS5' : 'HTTP';
+                  const updated = accounts.map(a => ({
+                    ...a,
+                    proxy: { ...a.proxy, ip: host, port: parsedPort, username: user, password: pass, protocol: protocol as import('@/types').ProxyProtocol, status: 'ACTIVE' as const, latencyMs: 45 }
+                  }));
+                  onUpdateAccounts(updated);
+                  alert(`✅ Proxy ${protocol}://${host}:${parsedPort} aplicado a todos os ${accounts.length} perfis!`);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs transition-all whitespace-nowrap shadow-lg"
+              >
+                ⚡ Aplicar a Todos
+              </button>
+              <button
+                onClick={() => {
+                  if (!confirm('Isso vai limpar todos os dados salvos e restaurar os perfis padrão com o proxy correto. Continuar?')) return;
+                  localStorage.removeItem('omni_media_accounts');
+                  window.location.reload();
+                }}
+                className="px-3 py-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 font-bold text-xs transition-all whitespace-nowrap"
+                title="Restaurar perfis padrão (limpa localStorage)"
+              >
+                🔄 Resetar
+              </button>
+            </div>
+            <p className="text-[var(--text-muted)] text-[10px] font-mono">
+              Formato aceito: <span className="text-purple-400">ip:porta:usuario:senha</span> — Ex: 82.140.183.78:49155:thaisrafipv:KxjbNhyGPj
+            </p>
+          </div>
+        );
+      })()}
+
 
       {/* Status Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

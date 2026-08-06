@@ -141,8 +141,8 @@ if not exist "${extDir}" mkdir "${extDir}"
 
 ${hasAuth ? `
 :: Configura extensao de proxy estilo AdsPower no perfil do Chrome
-powershell -NoProfile -Command "[IO.File]::WriteAllBytes('${extDir}\\manifest.json', [Convert]::FromBase64String('${manifestB64}'))" 2>nul
-powershell -NoProfile -Command "[IO.File]::WriteAllBytes('${extDir}\\background.js', [Convert]::FromBase64String('${bgB64}'))" 2>nul
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Set-Content -Path '${extDir}\\manifest.json' -Encoding Ascii" 2>nul
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Set-Content -Path '${extDir}\\background.js' -Encoding Ascii" 2>nul
 ` : ''}
 
 set "CHROME="
@@ -672,8 +672,8 @@ timeout /t 1 >nul`;
       const bgB64 = Buffer.from(bgScript).toString('base64');
 
       const extSetup = hasAuth ? `if not exist "${extDir}" mkdir "${extDir}"
-powershell -NoProfile -Command "[IO.File]::WriteAllBytes('${extDir}\\manifest.json', [Convert]::FromBase64String('${manifestB64}'))" 2>nul
-powershell -NoProfile -Command "[IO.File]::WriteAllBytes('${extDir}\\background.js', [Convert]::FromBase64String('${bgB64}'))" 2>nul` : '';
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Set-Content -Path '${extDir}\\manifest.json' -Encoding Ascii" 2>nul
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Set-Content -Path '${extDir}\\background.js' -Encoding Ascii" 2>nul` : '';
 
       const chromeLaunch = hasAuth
         ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`

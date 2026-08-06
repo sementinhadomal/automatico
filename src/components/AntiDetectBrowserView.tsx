@@ -45,6 +45,67 @@ function buildBatScript(acc: Account, px: { host: string; port: string; user: st
   const hasAuth = !!(px.user && px.pass);
   const isSocks = (px.protocol && px.protocol.toUpperCase() === 'SOCKS5') || px.port === '49156';
 
+  const tunnelJsCode = `const net = require('net');
+const localPort = parseInt(process.argv[2] || '10800', 10);
+const targetHost = process.argv[3];
+const targetPort = parseInt(process.argv[4] || '10000', 10);
+const proxyUser = process.argv[5] || '';
+const proxyPass = process.argv[6] || '';
+const mode = process.argv[7] || 'AUTO';
+
+const server = net.createServer((clientSocket) => {
+  clientSocket.once('data', (greeting) => {
+    if (greeting[0] !== 0x05) { clientSocket.destroy(); return; }
+    clientSocket.write(Buffer.from([0x05, 0x00]));
+    clientSocket.once('data', (req) => {
+      if (req[0] !== 0x05 || req[1] !== 0x01) { clientSocket.destroy(); return; }
+      let destHost = ''; let destPort = 0; const atyp = req[3];
+      if (atyp === 0x01) { destHost = req.slice(4, 8).join('.'); }
+      else if (atyp === 0x03) { destHost = req.slice(5, 5 + req[4]).toString('ascii'); }
+      destPort = req.readUInt16BE(req.length - 2);
+      const targetSocket = net.connect(targetPort, targetHost, () => {
+        if (mode === 'SOCKS5') {
+          targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]));
+        } else {
+          const auth = proxyUser ? 'Proxy-Authorization: Basic ' + Buffer.from(proxyUser + ':' + proxyPass).toString('base64') + '\\r\\n' : '';
+          targetSocket.write('CONNECT ' + destHost + ':' + destPort + ' HTTP/1.1\\r\\nHost: ' + destHost + ':' + destPort + '\\r\\n' + auth + '\\r\\n');
+        }
+      });
+      let state = mode === 'SOCKS5' ? 'GREETING' : 'HTTP_CONNECT';
+      targetSocket.on('data', (data) => {
+        if (state === 'GREETING') {
+          if (data[0] === 0x05 && data[1] === 0x02 && proxyUser) {
+            const u = Buffer.from(proxyUser); const p = Buffer.from(proxyPass);
+            targetSocket.write(Buffer.concat([Buffer.from([0x01, u.length]), u, Buffer.from([p.length]), p]));
+            state = 'AUTH';
+          } else if (data[0] === 0x05 && data[1] === 0x00) {
+            state = 'CONNECTED';
+            clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+            clientSocket.pipe(targetSocket); targetSocket.pipe(clientSocket);
+          }
+        } else if (state === 'AUTH') {
+          if (data[1] === 0x00) {
+            state = 'CONNECTED';
+            clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+            clientSocket.pipe(targetSocket); targetSocket.pipe(clientSocket);
+          } else { clientSocket.destroy(); targetSocket.destroy(); }
+        } else if (state === 'HTTP_CONNECT') {
+          if (data.toString().includes('200')) {
+            state = 'CONNECTED';
+            clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+            clientSocket.pipe(targetSocket); targetSocket.pipe(clientSocket);
+          } else { clientSocket.destroy(); targetSocket.destroy(); }
+        }
+      });
+      targetSocket.on('error', () => clientSocket.destroy());
+      clientSocket.on('error', () => targetSocket.destroy());
+    });
+  });
+});
+server.listen(localPort, '127.0.0.1');`;
+
+  const b64 = Buffer.from(tunnelJsCode).toString('base64');
+
   return `@echo off
 chcp 65001 >nul
 title OmniMedia — ${acc.name} (${acc.country})
@@ -57,66 +118,8 @@ echo.
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
 
-:: Escrever script de tunnel universal (suporta HTTP/S e SOCKS5)
-(
-echo const net = require('net'^);
-echo const localPort = parseInt(process.argv[2] || '10800', 10^);
-echo const targetHost = process.argv[3];
-echo const targetPort = parseInt(process.argv[4] || '10000', 10^);
-echo const proxyUser = process.argv[5] || '';
-echo const proxyPass = process.argv[6] || '';
-echo const mode = process.argv[7] || 'AUTO';
-echo const server = net.createServer((clientSocket^) =^> {
-echo   clientSocket.once('data', (greeting^) =^> {
-echo     if (greeting[0] !== 0x05^) { clientSocket.destroy(^); return; }
-echo     clientSocket.write(Buffer.from([0x05, 0x00]^)^);
-echo     clientSocket.once('data', (req^) =^> {
-echo       if (req[0] !== 0x05 || req[1] !== 0x01^) { clientSocket.destroy(^); return; }
-echo       let destHost = ''; let destPort = 0; const atyp = req[3];
-echo       if (atyp === 0x01^) { destHost = req.slice(4, 8^).join('.'^); }
-echo       else if (atyp === 0x03^) { destHost = req.slice(5, 5 + req[4]^).toString('ascii'^); }
-echo       destPort = req.readUInt16BE(req.length - 2^);
-echo       const targetSocket = net.connect(targetPort, targetHost, (^) =^> {
-echo         if (mode === 'SOCKS5'^) {
-echo           targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]^)^);
-echo         } else {
-echo           const auth = proxyUser ? 'Proxy-Authorization: Basic ' + Buffer.from(proxyUser + ':' + proxyPass^).toString('base64'^) + '\\r\\n' : '';
-echo           targetSocket.write('CONNECT ' + destHost + ':' + destPort + ' HTTP/1.1\\r\\nHost: ' + destHost + ':' + destPort + '\\r\\n' + auth + '\\r\\n'^);
-echo         }
-echo       }^);
-echo       let state = mode === 'SOCKS5' ? 'GREETING' : 'HTTP_CONNECT';
-echo       targetSocket.on('data', (data^) =^> {
-echo         if (state === 'GREETING'^) {
-echo           if (data[0] === 0x05 && data[1] === 0x02 && proxyUser^) {
-echo             const u = Buffer.from(proxyUser^); const p = Buffer.from(proxyPass^);
-echo             targetSocket.write(Buffer.concat([Buffer.from([0x01, u.length]^), u, Buffer.from([p.length]^), p]^)^);
-echo             state = 'AUTH';
-echo           } else if (data[0] === 0x05 && data[1] === 0x00^) {
-echo             state = 'CONNECTED';
-echo             clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]^)^);
-echo             clientSocket.pipe(targetSocket^); targetSocket.pipe(clientSocket^);
-echo           }
-echo         } else if (state === 'AUTH'^) {
-echo           if (data[1] === 0x00^) {
-echo             state = 'CONNECTED';
-echo             clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]^)^);
-echo             clientSocket.pipe(targetSocket^); targetSocket.pipe(clientSocket^);
-echo           } else { clientSocket.destroy(^); targetSocket.destroy(^); }
-echo         } else if (state === 'HTTP_CONNECT'^) {
-echo           if (data.toString(^).includes('200'^)^) {
-echo             state = 'CONNECTED';
-echo             clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]^)^);
-echo             clientSocket.pipe(targetSocket^); targetSocket.pipe(clientSocket^);
-echo           } else { clientSocket.destroy(^); targetSocket.destroy(^); }
-echo         }
-echo       }^);
-echo       targetSocket.on('error', (^) =^> clientSocket.destroy(^)^);
-echo       clientSocket.on('error', (^) =^> targetSocket.destroy(^)^);
-echo     }^);
-echo   }^);
-echo }^);
-echo server.listen(localPort, '127.0.0.1'^);
-) > "C:\\OmniMedia\\tunnel.js"
+:: Escrever script de tunnel universal via PowerShell Base64
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64}')) | Out-File -FilePath 'C:\\OmniMedia\\tunnel.js' -Encoding utf8" 2>nul
 
 set "TUNNEL_READY=0"
 where node >nul 2>nul
@@ -153,6 +156,7 @@ echo Chrome aberto com sucesso!
 timeout /t 3 >nul
 `;
 }
+
 
 
 

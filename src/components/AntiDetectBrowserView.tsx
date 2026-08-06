@@ -44,9 +44,12 @@ function buildBatScript(acc: Account, px: { host: string; port: string; user: st
   const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
   const cdpPort = tunnelPort + 1000;
   const hasAuth = !!(px.user && px.pass);
-  const isSocks = (px.protocol && px.protocol.toUpperCase() === 'SOCKS5') || px.port === '49156';
-  const proxyScheme = isSocks ? 'socks5' : 'http';
-  const parsedPort = parseInt(px.port, 10) || (isSocks ? 49156 : 49155);
+  const cleanPort = String(px.port).trim();
+  const isSocks = cleanPort === '49156' || (px.protocol && px.protocol.toUpperCase() === 'SOCKS5' && cleanPort !== '49155');
+  const proxyScheme = (cleanPort === '49155' || !isSocks) ? 'http' : 'socks5';
+  const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
+
+
 
   // Manifest V2 Chrome extension (identical to AdsPower / GoLogin)
   const manifestObj = {

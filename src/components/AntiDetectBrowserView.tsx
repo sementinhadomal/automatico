@@ -102,11 +102,11 @@ timeout /t 3 >nul
 
   const bgScript = `
 chrome.webRequest.onAuthRequired.addListener(
-  function(details) {
-    return { authCredentials: { username: "${px.user || ''}", password: "${px.pass || ''}" } };
+  function(details, callback) {
+    callback({ authCredentials: { username: "${px.user || ''}", password: "${px.pass || ''}" } });
   },
   { urls: ["<all_urls>"] },
-  ["blocking"]
+  ["asyncBlocking"]
 );
 
 var config = {
@@ -670,7 +670,7 @@ timeout /t 1 >nul`;
         background: { service_worker: 'background.js' }
       };
       const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
-      const bgScript = `chrome.webRequest.onAuthRequired.addListener(function(d){return{authCredentials:{username:"${px.user}",password:"${px.pass}"}};},{urls:["<all_urls>"]},["blocking"]);chrome.proxy.settings.set({value:{mode:"fixed_servers",rules:{singleProxy:{scheme:"${proxyScheme}",host:"${px.host}",port:${parsedPort}},bypassList:["<-loopback>"]}},scope:"regular"},function(){});`;
+      const bgScript = `chrome.webRequest.onAuthRequired.addListener(function(d, callback){callback({authCredentials:{username:"${px.user}",password:"${px.pass}"}});},{urls:["<all_urls>"]},["asyncBlocking"]);chrome.proxy.settings.set({value:{mode:"fixed_servers",rules:{singleProxy:{scheme:"${proxyScheme}",host:"${px.host}",port:${parsedPort}},bypassList:["<-loopback>"]}},scope:"regular"},function(){});`;
       const bgB64 = Buffer.from(bgScript).toString('base64');
 
       const extSetup = hasAuth ? `if not exist "${extDir}" mkdir "${extDir}"

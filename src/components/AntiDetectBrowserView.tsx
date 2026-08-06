@@ -92,7 +92,7 @@ set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
   if exist "C:\\OmniMedia\\tunnel.js" (
-    ${hasAuth ? `:: Mata proxy antigo se houver\n    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    :: Inicia novo proxy invisível\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${ip}"" ${port} ""${user}"" ""${pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 3 >nul` : ':: sem auth'}
+    ${hasAuth ? `rem Mata proxy antigo se houver\n    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    rem Inicia novo proxy invisível\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${ip}"" ${port} ""${user}"" ""${pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 3 >nul` : 'rem sem auth'}
   )
 )
 set "CHROME="
@@ -463,7 +463,7 @@ set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
   if exist "C:\\OmniMedia\\tunnel.js" (
-${hasAuth ? `    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 1 >nul` : '    :: Sem autenticacao'}
+${hasAuth ? `    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 1 >nul` : '    rem Sem autenticacao'}
   )
 )
 

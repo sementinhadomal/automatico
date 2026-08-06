@@ -37,6 +37,81 @@ interface AntiDetectBrowserViewProps {
 // ─── Modal de Edição de Proxy (reutilizável internamente) ─────────────────────
 const SITE_URL_INNER = 'https://multimedia-saas-platform.vercel.app';
 
+// ─── Função standalone de geração do .bat (usada em múltiplos componentes) ────
+function buildBatScript(acc: Account, px: { host: string; port: string; user: string; pass: string; protocol: string }): string {
+  const profileDir = `C:\\\\OmniMedia\\\\Profiles\\\\${acc.id}`;
+  const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
+  const cdpPort = tunnelPort + 1000;
+  const hasAuth = !!(px.user && px.pass);
+
+  const tunnelJsContent = `var net=require('net');var lp=parseInt(process.argv[2]),rh=process.argv[3],rp=parseInt(process.argv[4]),u=process.argv[5],p=process.argv[6];net.createServer(function(c){var r=net.connect(rp,rh,function(){if(u&&p){var auth='CONNECT '+rh+':'+rp+' HTTP/1.1\\r\\nHost: '+rh+':'+rp+'\\r\\nProxy-Authorization: Basic '+Buffer.from(u+':'+p).toString('base64')+'\\r\\n\\r\\n';r.write(auth);}c.pipe(r);r.pipe(c);});c.on('error',function(){});r.on('error',function(){});}).listen(lp,function(){console.log('OmniMedia Tunnel ativo na porta '+lp);});`;
+
+  if (!hasAuth) {
+    return `@echo off
+chcp 65001 >nul
+title OmniMedia — ${acc.name} [SEM AUTH]
+color 0A
+echo ============================================
+echo   OmniMedia Launcher
+echo   Perfil : ${acc.name}
+echo   Proxy  : ${px.host}:${px.port} (direto)
+echo ============================================
+echo.
+if not exist "C:\\\\OmniMedia" mkdir "C:\\\\OmniMedia"
+if not exist "${profileDir}" mkdir "${profileDir}"
+set "CHROME="
+for %%P in ("%ProgramFiles%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" "%ProgramFiles(x86)%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" "%LocalAppData%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe") do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
+if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
+echo Abrindo Chrome com proxy direto...
+start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+echo Chrome iniciado!
+timeout /t 5 >nul
+`;
+  }
+
+  return `@echo off
+chcp 65001 >nul
+title OmniMedia — ${acc.name} [PROXY TUNNEL ATIVO]
+color 0B
+echo ============================================
+echo   OmniMedia Proxy Tunnel
+echo   Perfil : ${acc.name}
+echo   Proxy  : ${px.host}:${px.port}
+echo   User   : ${px.user}
+echo   Tunnel : 127.0.0.1:${tunnelPort}
+echo ============================================
+echo.
+if not exist "C:\\\\OmniMedia" mkdir "C:\\\\OmniMedia"
+if not exist "${profileDir}" mkdir "${profileDir}"
+where node >nul 2>nul
+if %errorlevel% neq 0 (
+  echo ERRO: Node.js nao encontrado!
+  echo Baixe em: https://nodejs.org/en/download
+  pause & exit /b 1
+)
+echo ${tunnelJsContent} > "C:\\\\OmniMedia\\\\tunnel_${tunnelPort}.js"
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort} " 2^>nul') do taskkill /F /PID %%a >nul 2>&1
+echo Iniciando tunnel... Aguarde 4 segundos.
+start /min "OmniTunnel:${tunnelPort}" cmd /k "node C:\\\\OmniMedia\\\\tunnel_${tunnelPort}.js ${tunnelPort} ${px.host} ${px.port} ${px.user} ${px.pass}"
+timeout /t 4 >nul
+set "CHROME="
+for %%P in ("%ProgramFiles%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" "%ProgramFiles(x86)%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" "%LocalAppData%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe") do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
+if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
+echo Abrindo Chrome com proxy tunelado...
+start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+echo.
+echo Chrome iniciado! MANTENHA ESTA JANELA ABERTA — ela mantem o proxy ativo.
+echo Feche apenas quando quiser encerrar a sessao.
+echo.
+pause
+`;
+}
+
+
 const EditProxyModal: React.FC<{
   account: Account;
   onClose: () => void;
@@ -74,41 +149,13 @@ const EditProxyModal: React.FC<{
   const handleSaveAndDownload = () => {
     const finalPort = parseInt(port, 10) || account.proxy.port;
     onSave(ip, finalPort, user, pass);
-    const profileDir = `C:\\OmniMedia\\Profiles\\${account.id}`;
-    const tunnelPort = 10800 + (Math.abs(account.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
-    const cdpPort = tunnelPort + 1000;
-    const hasAuth = !!(user && pass);
-    const script = `@echo off
-chcp 65001 >nul
-title OmniMedia — ${account.name}
-echo Proxy: ${ip}:${port}
-echo.
-if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
-if not exist "${profileDir}" mkdir "${profileDir}"
-
-echo Atualizando tunnel proxy...
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL_INNER}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
-
-set "TUNNEL_READY=0"
-where node >nul 2>nul
-if %errorlevel%==0 (
-  if exist "C:\\OmniMedia\\tunnel.js" (
-    ${hasAuth ? `rem Mata proxy antigo se houver\\n    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\\n    rem Inicia novo proxy invisível\\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${ip}"" ${port} ""${user}"" ""${pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    set "TUNNEL_READY=1"\\n    timeout /t 3 >nul` : 'rem sem auth'}
-  )
-)
-set "CHROME="
-for %%P in ("%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe") do (
-  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
-)
-if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
-if "%TUNNEL_READY%"=="1" (
-  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-) else (
-  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-)
-\`;ble-sync --window-size=1280,800 https://whoer.net
-)
-`;
+    const script = buildBatScript(account, {
+      host: ip,
+      port: String(finalPort),
+      user,
+      pass,
+      protocol: account.proxy.protocol,
+    });
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -117,6 +164,7 @@ if "%TUNNEL_READY%"=="1" (
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -442,8 +490,8 @@ timeout /t 4 >nul
 
   // ─── Gera o script .bat para Windows ──────────────────────────────────────
   const generateWindowsLauncher = (acc: Account, customProxy?: { host: string; port: string; user: string; pass: string; protocol: string }): string => {
-    const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
     const px = customProxy || { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: acc.proxy.protocol };
+    const profileDir = `C:\\\\OmniMedia\\\\Profiles\\\\${acc.id}`;
     const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
     const cdpPort = tunnelPort + 1000;
     const hasAuth = !!(px.user && px.pass);

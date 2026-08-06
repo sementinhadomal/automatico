@@ -43,6 +43,7 @@ function buildBatScript(acc: Account, px: { host: string; port: string; user: st
   const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
   const cdpPort = tunnelPort + 1000;
   const hasAuth = !!(px.user && px.pass);
+  const isSocks = (px.protocol && px.protocol.toUpperCase() === 'SOCKS5') || px.port === '49156';
 
   return `@echo off
 chcp 65001 >nul
@@ -56,8 +57,7 @@ echo.
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
 
-:: Criar script de tunnel SOCKS5 local se nao existir
-if not exist "C:\\OmniMedia\\tunnel.js" (
+:: Escrever script de tunnel universal (suporta HTTP/S e SOCKS5)
 (
 echo const net = require('net'^);
 echo const localPort = parseInt(process.argv[2] || '10800', 10^);
@@ -65,47 +65,64 @@ echo const targetHost = process.argv[3];
 echo const targetPort = parseInt(process.argv[4] || '10000', 10^);
 echo const proxyUser = process.argv[5] || '';
 echo const proxyPass = process.argv[6] || '';
+echo const mode = process.argv[7] || 'AUTO';
 echo const server = net.createServer((clientSocket^) =^> {
-echo   const targetSocket = new net.Socket(^);
-echo   targetSocket.connect(targetPort, targetHost, (^) =^> {
-echo     targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]^)^);
+echo   clientSocket.once('data', (greeting^) =^> {
+echo     if (greeting[0] !== 0x05^) { clientSocket.destroy(^); return; }
+echo     clientSocket.write(Buffer.from([0x05, 0x00]^)^);
+echo     clientSocket.once('data', (req^) =^> {
+echo       if (req[0] !== 0x05 || req[1] !== 0x01^) { clientSocket.destroy(^); return; }
+echo       let destHost = ''; let destPort = 0; const atyp = req[3];
+echo       if (atyp === 0x01^) { destHost = req.slice(4, 8^).join('.'^); }
+echo       else if (atyp === 0x03^) { destHost = req.slice(5, 5 + req[4]^).toString('ascii'^); }
+echo       destPort = req.readUInt16BE(req.length - 2^);
+echo       const targetSocket = net.connect(targetPort, targetHost, (^) =^> {
+echo         if (mode === 'SOCKS5'^) {
+echo           targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]^)^);
+echo         } else {
+echo           const auth = proxyUser ? 'Proxy-Authorization: Basic ' + Buffer.from(proxyUser + ':' + proxyPass^).toString('base64'^) + '\\r\\n' : '';
+echo           targetSocket.write('CONNECT ' + destHost + ':' + destPort + ' HTTP/1.1\\r\\nHost: ' + destHost + ':' + destPort + '\\r\\n' + auth + '\\r\\n'^);
+echo         }
+echo       }^);
+echo       let state = mode === 'SOCKS5' ? 'GREETING' : 'HTTP_CONNECT';
+echo       targetSocket.on('data', (data^) =^> {
+echo         if (state === 'GREETING'^) {
+echo           if (data[0] === 0x05 && data[1] === 0x02 && proxyUser^) {
+echo             const u = Buffer.from(proxyUser^); const p = Buffer.from(proxyPass^);
+echo             targetSocket.write(Buffer.concat([Buffer.from([0x01, u.length]^), u, Buffer.from([p.length]^), p]^)^);
+echo             state = 'AUTH';
+echo           } else if (data[0] === 0x05 && data[1] === 0x00^) {
+echo             state = 'CONNECTED';
+echo             clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]^)^);
+echo             clientSocket.pipe(targetSocket^); targetSocket.pipe(clientSocket^);
+echo           }
+echo         } else if (state === 'AUTH'^) {
+echo           if (data[1] === 0x00^) {
+echo             state = 'CONNECTED';
+echo             clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]^)^);
+echo             clientSocket.pipe(targetSocket^); targetSocket.pipe(clientSocket^);
+echo           } else { clientSocket.destroy(^); targetSocket.destroy(^); }
+echo         } else if (state === 'HTTP_CONNECT'^) {
+echo           if (data.toString(^).includes('200'^)^) {
+echo             state = 'CONNECTED';
+echo             clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]^)^);
+echo             clientSocket.pipe(targetSocket^); targetSocket.pipe(clientSocket^);
+echo           } else { clientSocket.destroy(^); targetSocket.destroy(^); }
+echo         }
+echo       }^);
+echo       targetSocket.on('error', (^) =^> clientSocket.destroy(^)^);
+echo       clientSocket.on('error', (^) =^> targetSocket.destroy(^)^);
+echo     }^);
 echo   }^);
-echo   let state = 'GREETING';
-echo   targetSocket.on('data', (data^) =^> {
-echo     if (state === 'GREETING'^) {
-echo       if (data[1] === 0x02 && proxyUser^) {
-echo         const u = Buffer.from(proxyUser^);
-echo         const p = Buffer.from(proxyPass^);
-echo         const req = Buffer.concat([Buffer.from([0x01, u.length]^), u, Buffer.from([p.length]^), p]^);
-echo         state = 'AUTH';
-echo         targetSocket.write(req^);
-echo       } else if (data[1] === 0x00^) {
-echo         state = 'CONNECTED';
-echo         clientSocket.write(Buffer.from([0x05, 0x00]^)^);
-echo         clientSocket.pipe(targetSocket^);
-echo         targetSocket.pipe(clientSocket^);
-echo       } else { clientSocket.destroy(^); }
-echo     } else if (state === 'AUTH'^) {
-echo       if (data[1] === 0x00^) {
-echo         state = 'CONNECTED';
-echo         clientSocket.write(Buffer.from([0x05, 0x00]^)^);
-echo         clientSocket.pipe(targetSocket^);
-echo         targetSocket.pipe(clientSocket^);
-echo       } else { clientSocket.destroy(^); targetSocket.destroy(^); }
-echo     }
-echo   }^);
-echo   clientSocket.on('error', (^) =^> targetSocket.destroy(^)^);
-echo   targetSocket.on('error', (^) =^> clientSocket.destroy(^)^);
 echo }^);
 echo server.listen(localPort, '127.0.0.1'^);
 ) > "C:\\OmniMedia\\tunnel.js"
-)
 
 set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel% neq 0 goto :find_chrome
 
-${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" >nul 2^>^&1
+${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" "${isSocks ? 'SOCKS5' : 'HTTP'}" >nul 2^>^&1
 set "TUNNEL_READY=1"
 timeout /t 1 >nul` : ''}
 
@@ -125,7 +142,7 @@ if not defined CHROME (
 )
 
 if "%TUNNEL_READY%"=="1" (
-  echo Proxy Autenticado Conectado via Tunnel SOCKS5 [127.0.0.1:${tunnelPort}]
+  echo Proxy Autenticado Conectado via Tunnel Local [127.0.0.1:${tunnelPort}]
   start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
   echo Proxy conectado via HTTP...

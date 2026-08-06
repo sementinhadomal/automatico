@@ -44,72 +44,80 @@ function buildBatScript(acc: Account, px: { host: string; port: string; user: st
   const cdpPort = tunnelPort + 1000;
   const hasAuth = !!(px.user && px.pass);
 
-  const tunnelJsContent = `var net=require('net');var lp=parseInt(process.argv[2]),rh=process.argv[3],rp=parseInt(process.argv[4]),u=process.argv[5],p=process.argv[6];net.createServer(function(c){var r=net.connect(rp,rh,function(){if(u&&p){var auth='CONNECT '+rh+':'+rp+' HTTP/1.1\\r\\nHost: '+rh+':'+rp+'\\r\\nProxy-Authorization: Basic '+Buffer.from(u+':'+p).toString('base64')+'\\r\\n\\r\\n';r.write(auth);}c.pipe(r);r.pipe(c);});c.on('error',function(){});r.on('error',function(){});}).listen(lp,function(){console.log('OmniMedia Tunnel ativo na porta '+lp);});`;
-
-  if (!hasAuth) {
-    return `@echo off
-chcp 65001 >nul
-title OmniMedia — ${acc.name} [SEM AUTH]
-color 0A
-echo ============================================
-echo   OmniMedia Launcher
-echo   Perfil : ${acc.name}
-echo   Proxy  : ${px.host}:${px.port} (direto)
-echo ============================================
-echo.
-if not exist "C:\\\\OmniMedia" mkdir "C:\\\\OmniMedia"
-if not exist "${profileDir}" mkdir "${profileDir}"
-set "CHROME="
-for %%P in ("%ProgramFiles%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" "%ProgramFiles(x86)%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" "%LocalAppData%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe") do (
-  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
-)
-if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
-echo Abrindo Chrome com proxy direto...
-start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-echo Chrome iniciado!
-timeout /t 5 >nul
-`;
-  }
+  // Base64 encoded tunnel script to prevent ANY batch syntax errors (&, |, >, <)
+  const tunnelB64 = "Y29uc3QgbmV0ID0gcmVxdWlyZSgnbmV0Jyk7CmNvbnN0IHBvcnQgPSBwYXJzZUludChwcm9jZXNzLmFyZ3ZbMl0pOwpjb25zdCBob3N0ID0gcHJvY2Vzcy5hcmd2WzNdOwpjb25zdCB0YXJnZXRQb3J0ID0gcGFyc2VJbnQocHJvY2Vzcy5hcmd2WzRdKTsKY29uc3QgdXNlciA9IHByb2Nlc3MuYXJndls1XTsKY29uc3QgcGFzcyA9IHByb2Nlc3MuYXJndls2XTsKCm5ldC5jcmVhdGVTZXJ2ZXIoKGNsaWVudFNvY2tldCkgPT4gewogIGNvbnN0IHNlcnZlclNvY2tldCA9IG5ldC5jb25uZWN0KHRhcmdldFBvcnQsIGhvc3QsICgpID0+IHsKICAgIGlmICh1c2VyICYmIHBhc3MpIHsKICAgICAgY29uc3QgYXV0aCA9ICdDT05ORUNUICcgKyBob3N0ICsgJzonICsgdGFyZ2V0UG9ydCArICcgSFRUUC8xLjFcclxuJyArCiAgICAgICAgICAgICAgICAgICAnSG9zdDogJyArIGhvc3QgKyAnOicgKyB0YXJnZXRQb3J0ICsgJ1xyXG4nICsKICAgICAgICAgICAgICAgICAgICAnUHJveHktQXV0aG9yaXphdGlvbjogQmFzaWMgJyArIEJ1ZmZlci5mcm9tKHVzZXIgKyAnOicgKyBwYXNzKS50b1N0cmluZygnYmFzZTY0JykgKyAnXHJcblxyXG4nOwogICAgICBzZXJ2ZXJTb2NrZXQud3JpdGUoYXV0aCk7CiAgICB9CiAgICBjbGllbnRTb2NrZXQucGlwZShzZXJ2ZXJTb2NrZXQpOwogICAgc2VydmVyU29ja2V0LnBpcGUoY2xpZW50U29ja2V0KTsKICB9KTsKICBjbGllbnRTb2NrZXQub24oJ2Vycm9yJywgKCkgPT4ge30pOwogIHNlcnZlclNvY2tldC5vbignZXJyb3InLCAoKSA9PiB7fSk7Cn0pLmxpc3Rlbihwb3J0LCAoKSA9PiB7CiAgY29uc29sZS5sb2coJ1R1bm5lbCBPbW5pTWVkaWEgcm9kYW5kbyBuYSBwb3J0YSAnICsgcG9ydCk7Cn0pOw==";
 
   return `@echo off
 chcp 65001 >nul
-title OmniMedia — ${acc.name} [PROXY TUNNEL ATIVO]
+title OmniMedia — ${acc.name} (${acc.country})
 color 0B
 echo ============================================
-echo   OmniMedia Proxy Tunnel
+echo   OmniMedia Browser Launcher
 echo   Perfil : ${acc.name}
 echo   Proxy  : ${px.host}:${px.port}
-echo   User   : ${px.user}
-echo   Tunnel : 127.0.0.1:${tunnelPort}
+echo   Pais   : ${acc.country}
 echo ============================================
 echo.
+
 if not exist "C:\\\\OmniMedia" mkdir "C:\\\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
-where node >nul 2>nul
-if %errorlevel% neq 0 (
-  echo ERRO: Node.js nao encontrado!
-  echo Baixe em: https://nodejs.org/en/download
-  pause & exit /b 1
-)
-echo ${tunnelJsContent} > "C:\\\\OmniMedia\\\\tunnel_${tunnelPort}.js"
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort} " 2^>nul') do taskkill /F /PID %%a >nul 2>&1
-echo Iniciando tunnel... Aguarde 4 segundos.
-start /min "OmniTunnel:${tunnelPort}" cmd /k "node C:\\\\OmniMedia\\\\tunnel_${tunnelPort}.js ${tunnelPort} ${px.host} ${px.port} ${px.user} ${px.pass}"
-timeout /t 4 >nul
+
+rem 1. Localiza o Google Chrome
 set "CHROME="
-for %%P in ("%ProgramFiles%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" "%ProgramFiles(x86)%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe" "%LocalAppData%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe") do (
+for %%P in (
+  "%ProgramFiles%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe"
+  "%ProgramFiles(x86)%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe"
+  "%LocalAppData%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe"
+) do (
   if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
 )
-if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
-echo Abrindo Chrome com proxy tunelado...
-start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+
+if not defined CHROME (
+  echo ERRO: Google Chrome nao foi encontrado neste computador!
+  echo Por favor, instale o Chrome e tente novamente.
+  pause
+  exit /b 1
+)
+
+${hasAuth ? `
+rem 2. Localiza o Node.js para o Proxy Tunnel
+set "NODE_BIN="
+where node >nul 2>nul && set "NODE_BIN=node"
+if not defined NODE_BIN if exist "%ProgramFiles%\\\\nodejs\\\\node.exe" set "NODE_BIN=%ProgramFiles%\\\\nodejs\\\\node.exe"
+if not defined NODE_BIN if exist "%ProgramFiles(x86)%\\\\nodejs\\\\node.exe" set "NODE_BIN=%ProgramFiles(x86)%\\\\nodejs\\\\node.exe"
+if not defined NODE_BIN if exist "%LocalAppData%\\\\Programs\\\\node\\\\node.exe" set "NODE_BIN=%LocalAppData%\\\\Programs\\\\node\\\\node.exe"
+
+if defined NODE_BIN (
+  echo Criando arquivo de tunnel...
+  powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${tunnelB64}')) | Out-File -FilePath 'C:\\\\OmniMedia\\\\tunnel_${tunnelPort}.js' -Encoding utf8" 2>nul
+
+  echo Encerrando tunnels antigos na porta ${tunnelPort}...
+  for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort} " 2^>nul') do taskkill /F /PID %%a >nul 2>&1
+
+  echo Iniciando Proxy Tunnel na porta ${tunnelPort}...
+  start /min "OmniTunnel:${tunnelPort}" cmd /k ""%NODE_BIN%" "C:\\\\OmniMedia\\\\tunnel_${tunnelPort}.js" ${tunnelPort} ${px.host} ${px.port} "${px.user}" "${px.pass}""
+  timeout /t 3 >nul
+
+  echo Abrindo Chrome com Proxy Tunelado (SOCKS5)...
+  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+) else (
+  echo AVISO: Node.js nao encontrado. Abrindo Chrome com proxy direto...
+  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+)
+` : `
+echo Abrindo Chrome com proxy direto...
+start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+`}
+
 echo.
-echo Chrome iniciado! MANTENHA ESTA JANELA ABERTA — ela mantem o proxy ativo.
-echo Feche apenas quando quiser encerrar a sessao.
+echo ============================================
+echo   Chrome iniciado com sucesso!
+echo ============================================
 echo.
-pause
+timeout /t 5 >nul
 `;
 }
+
 
 
 const EditProxyModal: React.FC<{

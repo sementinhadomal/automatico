@@ -89,13 +89,14 @@ timeout /t 3 >nul
   const proxyScheme = (cleanPort === '49155' || !isSocks) ? 'http' : 'socks5';
   const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
 
-  // Manifest V2 Chrome extension (identical to AdsPower / GoLogin)
+  // Manifest V3 Chrome extension
   const manifestObj = {
     version: '1.0.0',
-    manifest_version: 2,
+    manifest_version: 3,
     name: 'OmniMedia AdsPower Engine',
-    permissions: ['proxy', 'tabs', 'unlimitedStorage', 'storage', '<all_urls>', 'webRequest', 'webRequestBlocking'],
-    background: { scripts: ['background.js'] }
+    permissions: ['proxy', 'webRequest', 'webRequestAuthProvider'],
+    host_permissions: ['<all_urls>'],
+    background: { service_worker: 'background.js' }
   };
   const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
 
@@ -663,9 +664,10 @@ timeout /t 1 >nul`;
       const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
 
       const manifestObj = {
-        version: '1.0.0', manifest_version: 2, name: 'OmniMedia AdsPower Engine',
-        permissions: ['proxy', 'tabs', 'unlimitedStorage', 'storage', '<all_urls>', 'webRequest', 'webRequestBlocking'],
-        background: { scripts: ['background.js'] }
+        version: '1.0.0', manifest_version: 3, name: 'OmniMedia AdsPower Engine',
+        permissions: ['proxy', 'webRequest', 'webRequestAuthProvider'],
+        host_permissions: ['<all_urls>'],
+        background: { service_worker: 'background.js' }
       };
       const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
       const bgScript = `chrome.webRequest.onAuthRequired.addListener(function(d){return{authCredentials:{username:"${px.user}",password:"${px.pass}"}};},{urls:["<all_urls>"]},["blocking"]);chrome.proxy.settings.set({value:{mode:"fixed_servers",rules:{singleProxy:{scheme:"${proxyScheme}",host:"${px.host}",port:${parsedPort}},bypassList:["<-loopback>"]}},scope:"regular"},function(){});`;

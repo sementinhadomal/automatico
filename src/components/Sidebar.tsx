@@ -27,6 +27,7 @@ export type TabType =
   | 'media_downloader'
   | 'sharp_editor'
   | 'ffmpeg_editor'
+  | 'video_lab_pro'
   | 'campaigns'
   | 'auto_publisher'
   | 'history'
@@ -48,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: 'media_downloader', label: 'Downloader HD por Link', icon: Download, badge: 'HD' },
     { id: 'sharp_editor', label: 'Editor Sharp (Foto)', icon: ImageIcon, badge: 'Auto' },
     { id: 'ffmpeg_editor', label: 'Editor FFmpeg (Vídeo)', icon: VideoIcon, badge: 'Auto' },
+    { id: 'video_lab_pro', label: 'Video Lab Pro (Kie.ai)', icon: Sparkles, badge: 'IA' },
     { id: 'campaigns', label: 'Campanhas & Agenda', icon: CalendarDays },
     { id: 'auto_publisher', label: 'Motor de Publicação', icon: Send },
     { id: 'history', label: 'Histórico de Posts', icon: History },

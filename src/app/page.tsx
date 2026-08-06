@@ -25,6 +25,7 @@ import { SystemLogsQueueView } from '@/components/SystemLogsQueueView';
 import { AntiDetectBrowserView } from '@/components/AntiDetectBrowserView';
 import { AnalyticsDashboardView } from '@/components/AnalyticsDashboardView';
 import { MediaDownloaderView } from '@/components/MediaDownloaderView';
+import { VideoLabView } from '@/components/VideoLabView';
 
 export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -146,6 +147,8 @@ export default function Home() {
           {activeTab === 'sharp_editor' && <ImageStudioView mediaAssets={mediaAssets} />}
 
           {activeTab === 'ffmpeg_editor' && <VideoStudioView mediaAssets={mediaAssets} />}
+
+          {activeTab === 'video_lab_pro' && <VideoLabView />}
 
           {activeTab === 'campaigns' && (
             <CampaignsView

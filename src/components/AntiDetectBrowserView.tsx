@@ -76,6 +76,7 @@ const EditProxyModal: React.FC<{
     onSave(ip, finalPort, user, pass);
     const profileDir = `C:\\OmniMedia\\Profiles\\${account.id}`;
     const tunnelPort = 10800 + (Math.abs(account.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
+    const cdpPort = tunnelPort + 1000;
     const hasAuth = !!(user && pass);
     const script = `@echo off
 chcp 65001 >nul
@@ -92,7 +93,7 @@ set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
   if exist "C:\\OmniMedia\\tunnel.js" (
-    ${hasAuth ? `rem Mata proxy antigo se houver\n    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    rem Inicia novo proxy invisível\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${ip}"" ${port} ""${user}"" ""${pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 3 >nul` : 'rem sem auth'}
+    ${hasAuth ? `rem Mata proxy antigo se houver\\n    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\\n    rem Inicia novo proxy invisível\\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${ip}"" ${port} ""${user}"" ""${pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    set "TUNNEL_READY=1"\\n    timeout /t 3 >nul` : 'rem sem auth'}
   )
 )
 set "CHROME="
@@ -101,9 +102,11 @@ for %%P in ("%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" "%ProgramF
 )
 if not defined CHROME (echo ERRO: Chrome nao encontrado! & pause & exit /b 1)
 if "%TUNNEL_READY%"=="1" (
-  start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${ip}:${port}" --user-data-dir="${profileDir}" --lang=${account.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+)
+\`;ble-sync --window-size=1280,800 https://whoer.net
 )
 `;
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
@@ -442,6 +445,7 @@ timeout /t 4 >nul
     const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
     const px = customProxy || { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: acc.proxy.protocol };
     const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
+    const cdpPort = tunnelPort + 1000;
     const hasAuth = !!(px.user && px.pass);
 
     return `@echo off
@@ -463,7 +467,7 @@ set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
   if exist "C:\\OmniMedia\\tunnel.js" (
-${hasAuth ? `    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    set "TUNNEL_READY=1"\n    timeout /t 1 >nul` : '    rem Sem autenticacao'}
+${hasAuth ? `    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    set "TUNNEL_READY=1"\\n    timeout /t 1 >nul` : '    rem Sem autenticacao'}
   )
 )
 
@@ -482,9 +486,9 @@ if not defined CHROME (
 )
 
 if "%TUNNEL_READY%"=="1" (
-  start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
 `;
   };
@@ -497,15 +501,16 @@ if "%TUNNEL_READY%"=="1" (
       const px = { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: acc.proxy.protocol || 'http' };
       const hasAuth = !!(px.user && px.pass);
       const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
+      const cdpPort = tunnelPort + 1000;
 
       let proxySetup = '';
       let chromeLaunch = '';
 
       if (hasAuth) {
         proxySetup = `for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"`;
-        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
+        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
       } else {
-        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
+        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
       }
 
       return `:: Conta ${i + 1}: ${acc.name}

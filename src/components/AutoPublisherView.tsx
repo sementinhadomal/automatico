@@ -97,6 +97,38 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
   const ctaText = LocalizationEngine.getCtaForLanguage(currentAccount.languageCode);
   const hashtags = LocalizationEngine.rotateHashtags([]);
 
+  // --- Puppeteer Robot State ---
+  const [botVideoPath, setBotVideoPath] = useState('C:\\OmniMedia\\Lotes\\MeuLote\\video_001.mp4');
+  const [botCaption, setBotCaption] = useState('🔥 Conteúdo exclusivo! Vem conferir');
+  const [botHashtags, setBotHashtags] = useState('#HOT #FYP #Viral #Reels #Shorts');
+  const [botCdpPort, setBotCdpPort] = useState('11800');
+  const [botResults, setBotResults] = useState<Record<string, any>>({});
+  const [botPosting, setBotPosting] = useState<Record<string, boolean>>({});
+
+  const handleBotPublish = async (platform: string) => {
+    setBotPosting(prev => ({ ...prev, [platform]: true }));
+    try {
+      const res = await fetch('/api/autopost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform,
+          profileId: currentAccount.id,
+          cdpPort: parseInt(botCdpPort, 10),
+          videoPath: botVideoPath,
+          caption: botCaption,
+          hashtags: botHashtags,
+        }),
+      });
+      const data = await res.json();
+      setBotResults(prev => ({ ...prev, [platform]: data }));
+    } catch (err: any) {
+      setBotResults(prev => ({ ...prev, [platform]: { success: false, error: err.message } }));
+    } finally {
+      setBotPosting(prev => ({ ...prev, [platform]: false }));
+    }
+  };
+
   const handlePublishNow = async () => {
     if (publishPlatforms.length === 0) return;
     setIsPublishing(true);
@@ -341,6 +373,95 @@ export const AutoPublisherView: React.FC<AutoPublisherViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* === PUPPETEER ROBOT SECTION === */}
+      <div className="p-6 rounded-2xl bg-[var(--bg-card)] border border-indigo-500/30 space-y-5 shadow-sm">
+        <h3 className="font-bold text-sm text-white flex items-center gap-2 border-b border-[var(--border-color)] pb-3">
+          <RefreshCw className="w-4 h-4 text-indigo-400" />
+          Robô de Publicação Automática (Puppeteer)
+          <span className="ml-auto px-2 py-0.5 text-[10px] font-black bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-md">BETA</span>
+        </h3>
+
+        <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+          Com o Chrome do perfil <strong className="text-white">{currentAccount.name}</strong> aberto via o .bat, o robô vai se conectar invisívelmente e fazer o upload do vídeo em cada rede social.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Caminho do Vídeo (Local)</label>
+            <input
+              type="text"
+              value={botVideoPath}
+              onChange={(e) => setBotVideoPath(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs font-mono text-white focus:outline-none focus:border-indigo-500"
+              placeholder="C:\OmniMedia\Lotes\MeuLote\video_001.mp4"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Porta CDP (Debug Port)</label>
+            <input
+              type="text"
+              value={botCdpPort}
+              onChange={(e) => setBotCdpPort(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs font-mono text-white focus:outline-none focus:border-indigo-500"
+              placeholder="11800"
+            />
+            <p className="text-[10px] text-[var(--text-muted)]">Porta gerada automaticamente no .bat do perfil.</p>
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Legenda (Caption)</label>
+            <input
+              type="text"
+              value={botCaption}
+              onChange={(e) => setBotCaption(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Hashtags</label>
+            <input
+              type="text"
+              value={botHashtags}
+              onChange={(e) => setBotHashtags(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-white focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { id: 'tiktok', label: 'TikTok', icon: '🎵', color: 'bg-slate-700 hover:bg-slate-600 border-slate-500' },
+            { id: 'youtube', label: 'YouTube Shorts', icon: '▶️', color: 'bg-red-900/40 hover:bg-red-800/50 border-red-700/50' },
+            { id: 'instagram', label: 'Instagram Reels', icon: '📸', color: 'bg-pink-900/40 hover:bg-pink-800/50 border-pink-700/50' },
+            { id: 'x_twitter', label: 'X (Twitter)', icon: '𝕏', color: 'bg-blue-900/40 hover:bg-blue-800/50 border-blue-700/50' },
+          ].map((pl) => {
+            const isPosting = botPosting[pl.id];
+            const result = botResults[pl.id];
+            return (
+              <div key={pl.id} className="space-y-2">
+                <button
+                  onClick={() => handleBotPublish(pl.id)}
+                  disabled={isPosting}
+                  className={`w-full py-2.5 rounded-xl border text-white font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${pl.color}`}
+                >
+                  {isPosting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <span>{pl.icon}</span>}
+                  {isPosting ? 'Postando...' : pl.label}
+                </button>
+                {result && (
+                  <p className={`text-[10px] font-bold text-center rounded-lg px-2 py-1 ${result.success ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
+                    {result.success ? '✓ Publicado!' : `✗ ${result.error?.slice(0, 40) || 'Erro'}`}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-[10px] text-amber-400 leading-relaxed">
+          <strong>Como usar:</strong> Abra o Chrome do perfil clicando em "↓ Baixar Launcher .bat" na aba de Contas. Faça login nas 4 redes sociais. Depois volte aqui, informe o caminho do vídeo do lote e a porta CDP gerada no .bat, e clique no botão da rede social desejada.
+        </div>
+      </div>
+
     </div>
   );
 };

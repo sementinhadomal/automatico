@@ -448,27 +448,108 @@ timeout /t 4 >nul
     const cdpPort = tunnelPort + 1000;
     const hasAuth = !!(px.user && px.pass);
 
-    return `@echo off
+    // tunnel.js embedded inline — sem depender de download
+    const tunnelJsContent = [
+      `var net=require('net'),tls=require('tls');`,
+      `var lp=parseInt(process.argv[2]),rh=process.argv[3],rp=parseInt(process.argv[4]),u=process.argv[5],p=process.argv[6];`,
+      `net.createServer(function(c){`,
+      `  var r=net.connect(rp,rh,function(){`,
+      `    if(u&&p){`,
+      `      var auth='CONNECT '+rh+':'+rp+' HTTP/1.1\\r\\nHost: '+rh+':'+rp+'\\r\\nProxy-Authorization: Basic '+Buffer.from(u+':'+p).toString('base64')+'\\r\\n\\r\\n';`,
+      `      r.write(auth);`,
+      `    }`,
+      `    c.pipe(r);r.pipe(c);`,
+      `  });`,
+      `  c.on('error',function(){});r.on('error',function(){});`,
+      `}).listen(lp,function(){console.log('OmniMedia Tunnel ativo na porta '+lp);});`,
+    ].join('');
+
+    if (!hasAuth) {
+      // Sem autenticação: proxy direto HTTP
+      return `@echo off
 chcp 65001 >nul
-title OmniMedia — ${acc.name} (${acc.country})
+title OmniMedia — ${acc.name} (${acc.country}) [SEM AUTH]
+color 0A
 echo ============================================
-echo   Abrindo Chrome: ${acc.name}
-echo   Pais: ${acc.country} | Proxy: ${px.host}:${px.port}
+echo   OmniMedia Launcher
+echo   Perfil : ${acc.name}
+echo   Proxy  : ${px.host}:${px.port}
+echo   Tipo   : Direto (sem autenticacao)
 echo ============================================
 echo.
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
 
-echo Atualizando tunnel proxy...
-powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://multimedia-saas-platform.vercel.app/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+set "CHROME="
+for %%P in (
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+) do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
 
-set "TUNNEL_READY=0"
+if not defined CHROME (
+  echo ERRO: Google Chrome nao encontrado!
+  echo Instale o Chrome e tente novamente.
+  pause
+  exit /b 1
+)
+
+echo Abrindo Chrome com proxy direto...
+start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+echo Chrome iniciado! Pode fechar esta janela.
+timeout /t 5 >nul
+`;
+    }
+
+    // Com autenticação SOCKS5: precisa de tunnel node.js
+    return `@echo off
+chcp 65001 >nul
+title OmniMedia — ${acc.name} [PROXY TUNNEL ATIVO]
+color 0B
+echo ============================================
+echo   OmniMedia Proxy Tunnel
+echo   Perfil : ${acc.name}
+echo   Proxy  : ${px.host}:${px.port}
+echo   User   : ${px.user}
+echo   Tunnel : 127.0.0.1:${tunnelPort}
+echo ============================================
+echo.
+
+if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
+if not exist "${profileDir}" mkdir "${profileDir}"
+
+rem Verifica Node.js
 where node >nul 2>nul
-if %errorlevel%==0 (
-  if exist "C:\\OmniMedia\\tunnel.js" (
-${hasAuth ? `    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"\\n    set "TUNNEL_READY=1"\\n    timeout /t 1 >nul` : '    rem Sem autenticacao'}
-  )
+if %errorlevel% neq 0 (
+  echo ERRO: Node.js nao encontrado!
+  echo Baixe em: https://nodejs.org/en/download
+  echo Instale e execute este arquivo novamente.
+  pause
+  exit /b 1
+)
+
+rem Escreve o tunnel.js no disco
+echo ${tunnelJsContent} > "C:\\OmniMedia\\tunnel_${tunnelPort}.js"
+
+rem Mata tunnel antigo na mesma porta se existir
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort} " 2^>nul') do (
+  taskkill /F /PID %%a >nul 2>&1
+)
+
+rem Inicia o tunnel em janela minimizada (aparece na barra de tarefas)
+echo Iniciando tunnel proxy... Aguarde.
+start /min "OmniTunnel:${tunnelPort}" cmd /k "node C:\\OmniMedia\\tunnel_${tunnelPort}.js ${tunnelPort} ${px.host} ${px.port} ${px.user} ${px.pass}"
+
+rem Aguarda tunnel ficar pronto
+timeout /t 4 >nul
+
+rem Verifica se o tunnel subiu
+netstat -aon | findstr ":${tunnelPort} " >nul 2>nul
+if %errorlevel% neq 0 (
+  echo AVISO: Tunnel pode nao ter subido. Tentando assim mesmo...
 )
 
 set "CHROME="
@@ -481,15 +562,19 @@ for %%P in (
 )
 
 if not defined CHROME (
-  echo ERRO: Chrome nao encontrado!
-  timeout /t 3 >nul & exit /b 1
+  echo ERRO: Google Chrome nao encontrado!
+  pause
+  exit /b 1
 )
 
-if "%TUNNEL_READY%"=="1" (
-  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-) else (
-  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-)
+echo Abrindo Chrome com proxy tunelado...
+start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+
+echo.
+echo Chrome iniciado! MANTENHA ESTA JANELA ABERTA — ela mantem o proxy ativo.
+echo Feche esta janela apenas quando quiser encerrar a sessao.
+echo.
+pause
 `;
   };
 

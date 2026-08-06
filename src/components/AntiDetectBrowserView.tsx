@@ -56,17 +56,58 @@ echo.
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
 
-echo Atualizando tunnel proxy...
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL_INNER}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+:: Criar script de tunnel SOCKS5 local se nao existir
+if not exist "C:\\OmniMedia\\tunnel.js" (
+(
+echo const net = require('net'^);
+echo const localPort = parseInt(process.argv[2] || '10800', 10^);
+echo const targetHost = process.argv[3];
+echo const targetPort = parseInt(process.argv[4] || '10000', 10^);
+echo const proxyUser = process.argv[5] || '';
+echo const proxyPass = process.argv[6] || '';
+echo const server = net.createServer((clientSocket^) =^> {
+echo   const targetSocket = new net.Socket(^);
+echo   targetSocket.connect(targetPort, targetHost, (^) =^> {
+echo     targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]^)^);
+echo   }^);
+echo   let state = 'GREETING';
+echo   targetSocket.on('data', (data^) =^> {
+echo     if (state === 'GREETING'^) {
+echo       if (data[1] === 0x02 && proxyUser^) {
+echo         const u = Buffer.from(proxyUser^);
+echo         const p = Buffer.from(proxyPass^);
+echo         const req = Buffer.concat([Buffer.from([0x01, u.length]^), u, Buffer.from([p.length]^), p]^);
+echo         state = 'AUTH';
+echo         targetSocket.write(req^);
+echo       } else if (data[1] === 0x00^) {
+echo         state = 'CONNECTED';
+echo         clientSocket.write(Buffer.from([0x05, 0x00]^)^);
+echo         clientSocket.pipe(targetSocket^);
+echo         targetSocket.pipe(clientSocket^);
+echo       } else { clientSocket.destroy(^); }
+echo     } else if (state === 'AUTH'^) {
+echo       if (data[1] === 0x00^) {
+echo         state = 'CONNECTED';
+echo         clientSocket.write(Buffer.from([0x05, 0x00]^)^);
+echo         clientSocket.pipe(targetSocket^);
+echo         targetSocket.pipe(clientSocket^);
+echo       } else { clientSocket.destroy(^); targetSocket.destroy(^); }
+echo     }
+echo   }^);
+echo   clientSocket.on('error', (^) =^> targetSocket.destroy(^)^);
+echo   targetSocket.on('error', (^) =^> clientSocket.destroy(^)^);
+echo }^);
+echo server.listen(localPort, '127.0.0.1'^);
+) > "C:\\OmniMedia\\tunnel.js"
+)
 
 set "TUNNEL_READY=0"
 where node >nul 2>nul
 if %errorlevel%==0 (
-  if exist "C:\\OmniMedia\\tunnel.js" (
-${hasAuth ? `    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1
-    start /min "OmniTunnel:${tunnelPort}" cmd /k "node C:\\OmniMedia\\tunnel.js ${tunnelPort} ${px.host} ${px.port} ${px.user} ${px.pass}"
+  if ${hasAuth ? '1==1' : '1==0'} (
+    start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" >nul 2^>^&1
     set "TUNNEL_READY=1"
-    timeout /t 3 >nul` : '    rem Sem autenticacao'}
+    timeout /t 1 >nul
   )
 )
 
@@ -81,16 +122,22 @@ for %%P in (
 
 if not defined CHROME (
   echo ERRO: Chrome nao encontrado!
-  timeout /t 3 >nul & exit /b 1
+  pause & exit /b 1
 )
 
 if "%TUNNEL_READY%"=="1" (
+  echo Proxy Autenticado Conectado via Tunnel SOCKS5 [127.0.0.1:${tunnelPort}]
   start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
+  echo Proxy conectado via HTTP...
   start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
+
+echo Chrome aberto com sucesso!
+timeout /t 3 >nul
 `;
 }
+
 
 
 

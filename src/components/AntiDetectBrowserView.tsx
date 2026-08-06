@@ -40,71 +40,31 @@ const SITE_URL_INNER = 'https://multimedia-saas-platform.vercel.app';
 // ─── Função standalone de geração do .bat (usada em múltiplos componentes) ────
 function buildBatScript(acc: Account, px: { host: string; port: string; user: string; pass: string; protocol: string }): string {
   const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
+  const extDir = `${profileDir}\\proxy_ext`;
   const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
   const cdpPort = tunnelPort + 1000;
   const hasAuth = !!(px.user && px.pass);
   const isSocks = (px.protocol && px.protocol.toUpperCase() === 'SOCKS5') || px.port === '49156';
+  const proxyScheme = isSocks ? 'socks5' : 'http';
 
-  const tunnelJsCode = `const net = require('net');
-const localPort = parseInt(process.argv[2] || '10800', 10);
-const targetHost = process.argv[3];
-const targetPort = parseInt(process.argv[4] || '10000', 10);
-const proxyUser = process.argv[5] || '';
-const proxyPass = process.argv[6] || '';
-const mode = process.argv[7] || 'AUTO';
+  // Base64 encoded extension manifest & background script for Chrome proxy authentication
+  const manifestObj = {
+    version: '1.0.0',
+    manifest_version: 2,
+    name: 'OmniMedia Auto Proxy Auth',
+    permissions: ['proxy', 'tabs', 'unlimitedStorage', 'storage', '<all_urls>', 'webRequest', 'webRequestBlocking'],
+    background: { scripts: ['background.js'] }
+  };
+  const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
 
-const server = net.createServer((clientSocket) => {
-  clientSocket.once('data', (greeting) => {
-    if (greeting[0] !== 0x05) { clientSocket.destroy(); return; }
-    clientSocket.write(Buffer.from([0x05, 0x00]));
-    clientSocket.once('data', (req) => {
-      if (req[0] !== 0x05 || req[1] !== 0x01) { clientSocket.destroy(); return; }
-      let destHost = ''; let destPort = 0; const atyp = req[3];
-      if (atyp === 0x01) { destHost = req.slice(4, 8).join('.'); }
-      else if (atyp === 0x03) { destHost = req.slice(5, 5 + req[4]).toString('ascii'); }
-      destPort = req.readUInt16BE(req.length - 2);
-      const targetSocket = net.connect(targetPort, targetHost, () => {
-        if (mode === 'SOCKS5') {
-          targetSocket.write(Buffer.from([0x05, 0x02, 0x00, 0x02]));
-        } else {
-          const auth = proxyUser ? 'Proxy-Authorization: Basic ' + Buffer.from(proxyUser + ':' + proxyPass).toString('base64') + '\\r\\n' : '';
-          targetSocket.write('CONNECT ' + destHost + ':' + destPort + ' HTTP/1.1\\r\\nHost: ' + destHost + ':' + destPort + '\\r\\n' + auth + '\\r\\n');
-        }
-      });
-      let state = mode === 'SOCKS5' ? 'GREETING' : 'HTTP_CONNECT';
-      targetSocket.on('data', (data) => {
-        if (state === 'GREETING') {
-          if (data[0] === 0x05 && data[1] === 0x02 && proxyUser) {
-            const u = Buffer.from(proxyUser); const p = Buffer.from(proxyPass);
-            targetSocket.write(Buffer.concat([Buffer.from([0x01, u.length]), u, Buffer.from([p.length]), p]));
-            state = 'AUTH';
-          } else if (data[0] === 0x05 && data[1] === 0x00) {
-            state = 'CONNECTED';
-            clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
-            clientSocket.pipe(targetSocket); targetSocket.pipe(clientSocket);
-          }
-        } else if (state === 'AUTH') {
-          if (data[1] === 0x00) {
-            state = 'CONNECTED';
-            clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
-            clientSocket.pipe(targetSocket); targetSocket.pipe(clientSocket);
-          } else { clientSocket.destroy(); targetSocket.destroy(); }
-        } else if (state === 'HTTP_CONNECT') {
-          if (data.toString().includes('200')) {
-            state = 'CONNECTED';
-            clientSocket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
-            clientSocket.pipe(targetSocket); targetSocket.pipe(clientSocket);
-          } else { clientSocket.destroy(); targetSocket.destroy(); }
-        }
-      });
-      targetSocket.on('error', () => clientSocket.destroy());
-      clientSocket.on('error', () => targetSocket.destroy());
-    });
-  });
-});
-server.listen(localPort, '127.0.0.1');`;
-
-  const b64 = Buffer.from(tunnelJsCode).toString('base64');
+  const bgScript = `chrome.webRequest.onAuthRequired.addListener(
+  function(details) {
+    return { authCredentials: { username: "${px.user || ''}", password: "${px.pass || ''}" } };
+  },
+  { urls: ["<all_urls>"] },
+  ["blocking"]
+);`;
+  const bgB64 = Buffer.from(bgScript).toString('base64');
 
   return `@echo off
 chcp 65001 >nul
@@ -117,19 +77,14 @@ echo.
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
+if not exist "${extDir}" mkdir "${extDir}"
 
-:: Escrever script de tunnel universal via PowerShell Base64
-powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64}')) | Out-File -FilePath 'C:\\OmniMedia\\tunnel.js' -Encoding utf8" 2>nul
+${hasAuth ? `
+:: Configura extensao de autenticacao de proxy no perfil Chrome
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Out-File -FilePath '${extDir}\\manifest.json' -Encoding utf8" 2>nul
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Out-File -FilePath '${extDir}\\background.js' -Encoding utf8" 2>nul
+` : ''}
 
-set "TUNNEL_READY=0"
-where node >nul 2>nul
-if %errorlevel% neq 0 goto :find_chrome
-
-${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" "${isSocks ? 'SOCKS5' : 'HTTP'}" >nul 2^>^&1
-set "TUNNEL_READY=1"
-timeout /t 1 >nul` : ''}
-
-:find_chrome
 set "CHROME="
 for %%P in (
   "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
@@ -140,22 +95,23 @@ for %%P in (
 )
 
 if not defined CHROME (
-  echo ERRO: Google Chrome nao foi encontrado!
+  echo ERRO: Google Chrome nao foi encontrado neste computador!
+  echo Por favor, instale o Chrome e tente novamente.
   pause & exit /b 1
 )
 
-if "%TUNNEL_READY%"=="1" (
-  echo Proxy Autenticado Conectado via Tunnel Local [127.0.0.1:${tunnelPort}]
-  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-) else (
-  echo Proxy conectado via HTTP...
-  start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-)
+echo Conectando Chrome via Proxy (${proxyScheme.toUpperCase()}://${px.host}:${px.port})...
+${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${px.port}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
 
-echo Chrome aberto com sucesso!
+echo.
+echo ============================================
+echo   Chrome iniciado com sucesso!
+echo ============================================
+echo.
 timeout /t 3 >nul
 `;
 }
+
 
 
 

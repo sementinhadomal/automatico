@@ -161,7 +161,7 @@ if not defined CHROME (
 )
 
 echo Conectando Chrome via AdsPower Engine (${proxyScheme.toUpperCase()}://${px.host}:${parsedPort})...
-${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
+${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
 
 
 echo.
@@ -676,7 +676,7 @@ powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.C
 powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Out-File -FilePath '${extDir}\\background.js' -Encoding utf8" 2>nul` : '';
 
       const chromeLaunch = hasAuth
-        ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`
+        ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`
         : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
 
       return `:: Conta ${i + 1}: ${acc.name}

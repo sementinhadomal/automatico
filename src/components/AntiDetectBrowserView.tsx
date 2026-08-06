@@ -49,7 +49,7 @@ chcp 65001 >nul
 title OmniMedia — ${acc.name} (${acc.country})
 echo ============================================
 echo   Abrindo Chrome: ${acc.name}
-echo   Pais: ${acc.country} | Proxy: ${px.host}:${px.port}
+echo   Pais: ${acc.country} - Proxy: ${px.host}:${px.port}
 echo ============================================
 echo.
 
@@ -103,14 +103,13 @@ echo server.listen(localPort, '127.0.0.1'^);
 
 set "TUNNEL_READY=0"
 where node >nul 2>nul
-if %errorlevel%==0 (
-  if ${hasAuth ? '1==1' : '1==0'} (
-    start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" >nul 2^>^&1
-    set "TUNNEL_READY=1"
-    timeout /t 1 >nul
-  )
-)
+if %errorlevel% neq 0 goto :find_chrome
 
+${hasAuth ? `start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${px.host}" ${px.port} "${px.user}" "${px.pass}" >nul 2^>^&1
+set "TUNNEL_READY=1"
+timeout /t 1 >nul` : ''}
+
+:find_chrome
 set "CHROME="
 for %%P in (
   "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
@@ -121,7 +120,7 @@ for %%P in (
 )
 
 if not defined CHROME (
-  echo ERRO: Chrome nao encontrado!
+  echo ERRO: Google Chrome nao foi encontrado!
   pause & exit /b 1
 )
 

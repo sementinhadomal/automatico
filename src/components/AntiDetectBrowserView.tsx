@@ -343,32 +343,47 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
     }
   };
 
-  // URL base do site (Vercel) onde o tunnel.js fica hospedado
-  const SITE_URL = 'https://multimedia-saas-platform.vercel.app';
-
-  // Gera .bat com autenticação - baixa tunnel.js do Vercel via PowerShell
+  // Gera .bat com AdsPower Engine para proxy customizado (sem Node, sem tunnel)
   const generateAuthProxyLauncher = (): string => {
     if (!proxyParsed?.valid) return '';
     const { host, port, user, pass } = proxyParsed;
     const profileDir = `C:\\OmniMedia\\CustomProxy`;
-    const tunnelPort = 10899;
+    const extDir = `${profileDir}\\proxy_ext`;
     const hasAuth = !!(user && pass);
+    const cleanPort = String(port).trim();
+    const isSocks = cleanPort === '49156';
+    const proxyScheme = cleanPort === '49155' ? 'http' : (isSocks ? 'socks5' : 'http');
+    const parsedPort = parseInt(cleanPort, 10) || 49155;
+
+    const manifestObj = {
+      version: '1.0.0', manifest_version: 2, name: 'OmniMedia AdsPower Engine',
+      permissions: ['proxy', 'tabs', 'unlimitedStorage', 'storage', '<all_urls>', 'webRequest', 'webRequestBlocking'],
+      background: { scripts: ['background.js'] }
+    };
+    const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
+    const bgScript = `
+chrome.webRequest.onAuthRequired.addListener(
+  function(details) { return { authCredentials: { username: "${user || ''}", password: "${pass || ''}" } }; },
+  { urls: ["<all_urls>"] }, ["blocking"]
+);
+var config = { mode: "fixed_servers", rules: { singleProxy: { scheme: "${proxyScheme}", host: "${host}", port: ${parsedPort} }, bypassList: ["<-loopback>"] } };
+chrome.proxy.settings.set({ value: config, scope: "regular" }, function() {});
+`;
+    const bgB64 = Buffer.from(bgScript).toString('base64');
 
     return `@echo off
 chcp 65001 >nul
-title OmniMedia — Chrome Anonimo com Proxy Customizado
-echo ============================================
-echo   Proxy: ${host}:${port}
-echo   ${hasAuth ? `Usuario: ${user}` : 'Sem autenticacao'}
-echo ============================================
+title OmniMedia — Chrome com Proxy Customizado
+echo Proxy: ${proxyScheme.toUpperCase()}://${host}:${parsedPort}
 echo.
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
+if not exist "${extDir}" mkdir "${extDir}"
 
-:: Baixar tunnel.js do servidor
-echo Atualizando tunnel proxy...
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+${hasAuth ? `powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Out-File -FilePath '${extDir}\\manifest.json' -Encoding utf8" 2>nul
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Out-File -FilePath '${extDir}\\background.js' -Encoding utf8" 2>nul
+` : ''}
 
 set "CHROME="
 for %%P in (
@@ -384,27 +399,12 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-set "TUNNEL_READY=0"
-where node >nul 2>nul
-if %errorlevel%==0 (
-  if exist "C:\\OmniMedia\\tunnel.js" (
-    if not "${user}"=="" (
-      start /b "" node "C:\\OmniMedia\\tunnel.js" ${tunnelPort} "${host}" ${port} "${user}" "${pass}" >nul 2>&1
-      set "TUNNEL_READY=1"
-      timeout /t 2 >nul
-      echo Tunnel SOCKS5 ativo na porta ${tunnelPort}!
-    )
-  )
-)
+${hasAuth
+  ? `start "" "%CHROME%" --disable-ipv6 --proxy-server="${proxyScheme}://${host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`
+  : `start "" "%CHROME%" --disable-ipv6 --proxy-server="${proxyScheme}://${host}:${parsedPort}" --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
 
-if "%TUNNEL_READY%"=="1" (
-  start "" "%CHROME%" --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-) else (
-  start "" "%CHROME%" --proxy-server="http://${host}:${port}" --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-)
-
-echo Chrome aberto! Verifique o IP no whoer.net
-timeout /t 5 >nul
+echo Chrome iniciado! Verifique o IP no whoer.net
+timeout /t 3 >nul
 `;
   };
 
@@ -417,9 +417,6 @@ title OmniMedia — Lancador Permanente (Anti-Detect Browser)
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "C:\\OmniMedia\\Profiles" mkdir "C:\\OmniMedia\\Profiles"
 
-:: Baixar tunnel.js do servidor
-echo Atualizando tunnel proxy...
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
 
 set "CHROME="
 for %%P in (
@@ -527,27 +524,39 @@ timeout /t 4 >nul
 
   // ─── Script mestre (abre todos os Chromes de uma vez) ─────────────────────
   const generateMasterLauncher = (): string => {
-    const accounts_to_open = filteredAccounts.slice(0, 10); // max 10 simultâneos
+    const accounts_to_open = filteredAccounts.slice(0, 10);
     const blocks = accounts_to_open.map((acc, i) => {
       const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
+      const extDir = `${profileDir}\\proxy_ext`;
       const px = { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: acc.proxy.protocol || 'http' };
       const hasAuth = !!(px.user && px.pass);
       const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
       const cdpPort = tunnelPort + 1000;
+      const cleanPort = String(px.port).trim();
+      const isSocks = cleanPort === '49156';
+      const proxyScheme = cleanPort === '49155' ? 'http' : (isSocks ? 'socks5' : 'http');
+      const parsedPort = parseInt(cleanPort, 10) || 49155;
 
-      let proxySetup = '';
-      let chromeLaunch = '';
+      const manifestObj = {
+        version: '1.0.0', manifest_version: 2, name: 'OmniMedia AdsPower Engine',
+        permissions: ['proxy', 'tabs', 'unlimitedStorage', 'storage', '<all_urls>', 'webRequest', 'webRequestBlocking'],
+        background: { scripts: ['background.js'] }
+      };
+      const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
+      const bgScript = `chrome.webRequest.onAuthRequired.addListener(function(d){return{authCredentials:{username:"${px.user}",password:"${px.pass}"}};},{urls:["<all_urls>"]},["blocking"]);chrome.proxy.settings.set({value:{mode:"fixed_servers",rules:{singleProxy:{scheme:"${proxyScheme}",host:"${px.host}",port:${parsedPort}},bypassList:["<-loopback>"]}},scope:"regular"},function(){});`;
+      const bgB64 = Buffer.from(bgScript).toString('base64');
 
-      if (hasAuth) {
-        proxySetup = `for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1\n    echo Set WshShell = CreateObject("WScript.Shell") > "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    echo WshShell.Run "node ""C:\\OmniMedia\\tunnel.js"" ${tunnelPort} ""${px.host}"" ${px.port} ""${px.user}"" ""${px.pass}""", 0, False >> "C:\\OmniMedia\\run_${tunnelPort}.vbs"\n    cscript //nologo "C:\\OmniMedia\\run_${tunnelPort}.vbs" >nul 2>&1\n    del "C:\\OmniMedia\\run_${tunnelPort}.vbs"`;
-        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
-      } else {
-        chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
-      }
+      const extSetup = hasAuth ? `if not exist "${extDir}" mkdir "${extDir}"
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Out-File -FilePath '${extDir}\\manifest.json' -Encoding utf8" 2>nul
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Out-File -FilePath '${extDir}\\background.js' -Encoding utf8" 2>nul` : '';
+
+      const chromeLaunch = hasAuth
+        ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`
+        : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
 
       return `:: Conta ${i + 1}: ${acc.name}
 if not exist "${profileDir}" mkdir "${profileDir}"
-${proxySetup}
+${extSetup}
 ${chromeLaunch}
 timeout /t 1 >nul`;
     });

@@ -342,6 +342,15 @@ const EditProxyModal: React.FC<{
           </div>
         )}
 
+        {protocol === 'SOCKS5' && user.trim() !== '' && (
+          <div className="bg-orange-500/20 border border-orange-500/50 rounded-xl p-3 text-xs text-orange-200">
+            <strong className="block text-orange-400 mb-1 flex items-center gap-1">⚠️ Limitação do Google Chrome (SOCKS5)</strong>
+            O Chrome <strong>não suporta proxy SOCKS5 com usuário e senha</strong>. 
+            Isso vai causar o erro <i>ERR_SOCKS_CONNECTION_FAILED</i>. <br/>
+            <strong>Solução:</strong> Volte o protocolo para <strong>HTTP</strong> e use a porta <strong>49155</strong>.
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-color)]">
           <button onClick={handleSaveAndDownload} disabled={!isValid}

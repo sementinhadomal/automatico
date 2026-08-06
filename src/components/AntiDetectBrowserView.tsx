@@ -46,24 +46,43 @@ function buildBatScript(acc: Account, px: { host: string; port: string; user: st
   const hasAuth = !!(px.user && px.pass);
   const isSocks = (px.protocol && px.protocol.toUpperCase() === 'SOCKS5') || px.port === '49156';
   const proxyScheme = isSocks ? 'socks5' : 'http';
+  const parsedPort = parseInt(px.port, 10) || (isSocks ? 49156 : 49155);
 
-  // Base64 encoded extension manifest & background script for Chrome proxy authentication
+  // Manifest V2 Chrome extension (identical to AdsPower / GoLogin)
   const manifestObj = {
     version: '1.0.0',
     manifest_version: 2,
-    name: 'OmniMedia Auto Proxy Auth',
+    name: 'OmniMedia AdsPower Engine',
     permissions: ['proxy', 'tabs', 'unlimitedStorage', 'storage', '<all_urls>', 'webRequest', 'webRequestBlocking'],
     background: { scripts: ['background.js'] }
   };
   const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
 
-  const bgScript = `chrome.webRequest.onAuthRequired.addListener(
+  const bgScript = `
+chrome.webRequest.onAuthRequired.addListener(
   function(details) {
     return { authCredentials: { username: "${px.user || ''}", password: "${px.pass || ''}" } };
   },
   { urls: ["<all_urls>"] },
   ["blocking"]
-);`;
+);
+
+var config = {
+  mode: "fixed_servers",
+  rules: {
+    singleProxy: {
+      scheme: "${proxyScheme}",
+      host: "${px.host}",
+      port: ${parsedPort}
+    },
+    bypassList: ["<-loopback>"]
+  }
+};
+
+chrome.proxy.settings.set({ value: config, scope: "regular" }, function() {
+  console.log("OmniMedia AdsPower Proxy Engine Active");
+});
+`;
   const bgB64 = Buffer.from(bgScript).toString('base64');
 
   return `@echo off
@@ -80,7 +99,7 @@ if not exist "${profileDir}" mkdir "${profileDir}"
 if not exist "${extDir}" mkdir "${extDir}"
 
 ${hasAuth ? `
-:: Configura extensao de autenticacao de proxy no perfil Chrome
+:: Configura extensao de proxy estilo AdsPower no perfil do Chrome
 powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Out-File -FilePath '${extDir}\\manifest.json' -Encoding utf8" 2>nul
 powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Out-File -FilePath '${extDir}\\background.js' -Encoding utf8" 2>nul
 ` : ''}
@@ -100,8 +119,8 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-echo Conectando Chrome via Proxy (${proxyScheme.toUpperCase()}://${px.host}:${px.port})...
-${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${px.port}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
+echo Conectando Chrome via AdsPower Engine (${proxyScheme.toUpperCase()}://${px.host}:${px.port})...
+${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --load-extension="${extDir}" --disable-extensions-except="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
 
 echo.
 echo ============================================
@@ -111,6 +130,7 @@ echo.
 timeout /t 3 >nul
 `;
 }
+
 
 
 

@@ -138,53 +138,84 @@ timeout /t 3 >nul
 
 
 
-
-
-
-
 const EditProxyModal: React.FC<{
   account: Account;
   onClose: () => void;
-  onSave: (ip: string, port: number, user: string, pass: string) => void;
+  onSave: (ip: string, port: number, user: string, pass: string, protocol: string) => void;
+
 }> = ({ account, onClose, onSave }) => {
   const [quickPaste, setQuickPaste] = useState('');
   const [ip, setIp] = useState(account.proxy.ip);
   const [port, setPort] = useState(String(account.proxy.port));
   const [user, setUser] = useState(account.proxy.username || '');
   const [pass, setPass] = useState(account.proxy.password || '');
+  const [protocol, setProtocol] = useState<'HTTP' | 'SOCKS5'>(
+    String(account.proxy.port) === '49156' ? 'SOCKS5' : 'HTTP'
+  );
   const [pasted, setPasted] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+
+  // Auto-detect protocol from port
+  const autoDetectProtocol = (p: string): 'HTTP' | 'SOCKS5' => {
+    const cleaned = p.trim();
+    if (cleaned === '49156') return 'SOCKS5';
+    if (cleaned === '49155') return 'HTTP';
+    // common socks5 ports
+    const socksPorts = ['1080', '1081', '4145', '9050', '9150'];
+    return socksPorts.includes(cleaned) ? 'SOCKS5' : 'HTTP';
+  };
+
+  const handlePortChange = (val: string) => {
+    setPort(val);
+    setProtocol(autoDetectProtocol(val));
+  };
 
   const handlePaste = (val: string) => {
     setQuickPaste(val);
     const str = val.trim();
     if (!str) return;
-    let h = '', p = '', u = '', pw = '';
-    if (str.includes('@')) {
-      const [cred, host] = str.split('@');
+    let h = '', p = '', u = '', pw = '', proto = 'HTTP';
+
+    if (str.startsWith('socks5://') || str.startsWith('socks4://')) {
+      proto = 'SOCKS5';
+    }
+
+    const clean = str.replace(/^(socks5|socks4|https?):\/\//, '');
+
+    if (clean.includes('@')) {
+      const [cred, hostpart] = clean.split('@');
       [u, pw] = cred.split(':');
-      [h, p] = host.split(':');
+      [h, p] = hostpart.split(':');
     } else {
-      const parts = str.split(':');
+      const parts = clean.split(':');
       if (parts.length >= 4) [h, p, u, pw] = parts;
       else if (parts.length === 2) [h, p] = parts;
       else if (parts.length === 3) [h, p, u] = parts;
     }
+
     if (h) setIp(h);
-    if (p) setPort(p);
+    if (p) {
+      setPort(p);
+      const detected = proto === 'SOCKS5' ? 'SOCKS5' : autoDetectProtocol(p);
+      setProtocol(detected);
+    }
     if (u) setUser(u);
     if (pw) setPass(pw);
     if (h && p) setPasted(true);
   };
 
+  const finalPort = parseInt(port, 10) || account.proxy.port;
+  const proxyScheme = protocol === 'SOCKS5' ? 'socks5' : 'http';
+  const isValid = !!ip.trim() && !!port.trim() && !isNaN(finalPort);
+
   const handleSaveAndDownload = () => {
-    const finalPort = parseInt(port, 10) || account.proxy.port;
-    onSave(ip, finalPort, user, pass);
+    onSave(ip, finalPort, user, pass, protocol);
     const script = buildBatScript(account, {
       host: ip,
       port: String(finalPort),
       user,
       pass,
-      protocol: account.proxy.protocol,
+      protocol,
     });
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -193,65 +224,111 @@ const EditProxyModal: React.FC<{
     a.download = `chrome_${account.countryCode}_${account.id.slice(-4)}.bat`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    onClose();
   };
 
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
+
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
           <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-purple-400" />
             Editar Proxy — {account.name}
           </h3>
-          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">{account.countryCode}</span>
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${protocol === 'SOCKS5' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30' : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'}`}>
+              {protocol}
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">{account.countryCode}</span>
+          </div>
         </div>
 
+        {/* Quick Paste */}
         <div className="p-3.5 rounded-xl bg-gradient-to-r from-purple-900/20 to-indigo-900/20 border border-purple-500/30 space-y-2">
           <label className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5 text-amber-400" /> Colar Linha Completa:
+            <Zap className="w-3.5 h-3.5 text-amber-400" /> Colar Proxy Completo (igual AdsPower):
             <span className="ml-auto text-[9px] text-[var(--text-muted)] font-mono">host:porta:usuario:senha</span>
           </label>
           <input
             type="text"
-            placeholder="Cole aqui ex: proxy22-br-hz.ipbr.pro:10000:pv6VrLBR:3325U6MY"
+            placeholder="Ex: 82.140.183.78:49155:thaisrafipv:KxjbNhyGPj"
             value={quickPaste}
             onChange={(e) => handlePaste(e.target.value)}
             className="w-full rounded-lg bg-[var(--bg-primary)] border border-purple-500/40 p-2.5 text-xs font-mono text-[var(--text-primary)] focus:border-purple-400 focus:outline-none"
           />
-          {pasted && <div className="text-[10px] text-emerald-400 font-mono">✓ Dados extraídos e preenchidos!</div>}
+          {pasted && <div className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">✓ Dados extraídos! Protocolo detectado: <span className="font-bold">{protocol}</span></div>}
         </div>
 
+        {/* Fields */}
         <div className="grid grid-cols-2 gap-3">
-          {[{ label: 'IP / Host', val: ip, set: setIp, ph: 'ex: proxy22-br-hz.ipbr.pro' },
-            { label: 'Porta', val: port, set: setPort, ph: 'ex: 10000' },
-            { label: 'Usuário', val: user, set: setUser, ph: 'ex: pv6VrLBR' },
-            { label: 'Senha', val: pass, set: setPass, ph: 'ex: 3325U6MY' }
-          ].map(({ label, val, set, ph }) => (
-            <div key={label}>
-              <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">{label}</label>
-              <input type="text" value={val} onChange={(e) => set(e.target.value)} placeholder={ph}
-                className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none" />
+          <div className="col-span-2">
+            <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">IP / Host do Proxy</label>
+            <input type="text" value={ip} onChange={(e) => setIp(e.target.value)} placeholder="ex: 82.140.183.78"
+              className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">Porta</label>
+            <input type="text" value={port} onChange={(e) => handlePortChange(e.target.value)} placeholder="ex: 49155"
+              className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">Protocolo</label>
+            <div className="flex gap-1.5">
+              {(['HTTP', 'SOCKS5'] as const).map(p => (
+                <button key={p} onClick={() => setProtocol(p)}
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all border ${protocol === p
+                    ? p === 'SOCKS5' ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-blue-500/20 text-blue-300 border-blue-500/50'
+                    : 'bg-[var(--bg-primary)] text-[var(--text-muted)] border-[var(--border-color)] hover:border-purple-500/50'}`}>
+                  {p}
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">Usuário</label>
+            <input type="text" value={user} onChange={(e) => setUser(e.target.value)} placeholder="ex: thaisrafipv"
+              className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">Senha</label>
+            <div className="relative">
+              <input type={showPass ? 'text' : 'password'} value={pass} onChange={(e) => setPass(e.target.value)} placeholder="ex: KxjbNhyGPj"
+                className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-2.5 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none pr-8" />
+              <button onClick={() => setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] text-[10px]">
+                {showPass ? '🙈' : '👁'}
+              </button>
+            </div>
+          </div>
         </div>
 
-        {ip && port && (
-          <div className="p-2.5 rounded-xl bg-[var(--bg-primary)] border border-indigo-500/20 text-xs font-mono text-indigo-300 flex items-center gap-2">
-            <span className="text-emerald-400">✓</span>
-            <span>{ip}:{port}{user ? `:${user}:••••` : ''}</span>
+        {/* Preview */}
+        {isValid && (
+          <div className={`p-3 rounded-xl border text-xs font-mono flex items-center gap-3 ${protocol === 'SOCKS5' ? 'bg-amber-900/10 border-amber-500/20 text-amber-300' : 'bg-blue-900/10 border-blue-500/20 text-blue-300'}`}>
+            <span className="text-emerald-400 text-base">✓</span>
+            <div>
+              <div className="font-bold text-[11px]">{proxyScheme}://{ip}:{finalPort}</div>
+              {user && <div className="text-[10px] opacity-70 mt-0.5">Auth: {user}:{'•'.repeat(Math.min(pass.length, 8))}</div>}
+            </div>
+            <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-bold ${protocol === 'SOCKS5' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'}`}>{protocol}</span>
           </div>
         )}
 
-        <div className="flex flex-col gap-2 pt-3 border-t border-[var(--border-color)]">
-          <button onClick={handleSaveAndDownload} disabled={!ip || !port}
-            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-40 text-white text-xs font-bold transition-all flex items-center justify-center gap-2">
+        {/* Actions */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-color)]">
+          <button onClick={handleSaveAndDownload} disabled={!isValid}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-40 text-white text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg">
             <Download className="w-4 h-4" />
-            💾 Salvar Proxy & Baixar Launcher .bat
+            💾 Salvar &amp; Baixar Launcher .bat
           </button>
           <div className="flex gap-2">
             <button onClick={onClose} className="flex-1 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] border border-[var(--border-color)] hover:text-[var(--text-primary)] transition-all">Cancelar</button>
-            <button onClick={() => { const p = parseInt(port, 10); onSave(ip, isNaN(p) ? account.proxy.port : p, user, pass); }}
+            <button onClick={() => { onSave(ip, finalPort, user, pass, protocol); onClose(); }}
               className="flex-1 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 text-xs font-bold transition-all border border-purple-500/30">Só Salvar</button>
           </div>
         </div>

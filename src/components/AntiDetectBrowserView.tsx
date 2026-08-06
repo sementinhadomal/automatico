@@ -39,84 +39,59 @@ const SITE_URL_INNER = 'https://multimedia-saas-platform.vercel.app';
 
 // ─── Função standalone de geração do .bat (usada em múltiplos componentes) ────
 function buildBatScript(acc: Account, px: { host: string; port: string; user: string; pass: string; protocol: string }): string {
-  const profileDir = `C:\\\\OmniMedia\\\\Profiles\\\\${acc.id}`;
+  const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
   const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
   const cdpPort = tunnelPort + 1000;
   const hasAuth = !!(px.user && px.pass);
 
-  // Base64 encoded tunnel script to prevent ANY batch syntax errors (&, |, >, <)
-  const tunnelB64 = "Y29uc3QgbmV0ID0gcmVxdWlyZSgnbmV0Jyk7CmNvbnN0IHBvcnQgPSBwYXJzZUludChwcm9jZXNzLmFyZ3ZbMl0pOwpjb25zdCBob3N0ID0gcHJvY2Vzcy5hcmd2WzNdOwpjb25zdCB0YXJnZXRQb3J0ID0gcGFyc2VJbnQocHJvY2Vzcy5hcmd2WzRdKTsKY29uc3QgdXNlciA9IHByb2Nlc3MuYXJndls1XTsKY29uc3QgcGFzcyA9IHByb2Nlc3MuYXJndls2XTsKCm5ldC5jcmVhdGVTZXJ2ZXIoKGNsaWVudFNvY2tldCkgPT4gewogIGNvbnN0IHNlcnZlclNvY2tldCA9IG5ldC5jb25uZWN0KHRhcmdldFBvcnQsIGhvc3QsICgpID0+IHsKICAgIGlmICh1c2VyICYmIHBhc3MpIHsKICAgICAgY29uc3QgYXV0aCA9ICdDT05ORUNUICcgKyBob3N0ICsgJzonICsgdGFyZ2V0UG9ydCArICcgSFRUUC8xLjFcclxuJyArCiAgICAgICAgICAgICAgICAgICAnSG9zdDogJyArIGhvc3QgKyAnOicgKyB0YXJnZXRQb3J0ICsgJ1xyXG4nICsKICAgICAgICAgICAgICAgICAgICAnUHJveHktQXV0aG9yaXphdGlvbjogQmFzaWMgJyArIEJ1ZmZlci5mcm9tKHVzZXIgKyAnOicgKyBwYXNzKS50b1N0cmluZygnYmFzZTY0JykgKyAnXHJcblxyXG4nOwogICAgICBzZXJ2ZXJTb2NrZXQud3JpdGUoYXV0aCk7CiAgICB9CiAgICBjbGllbnRTb2NrZXQucGlwZShzZXJ2ZXJTb2NrZXQpOwogICAgc2VydmVyU29ja2V0LnBpcGUoY2xpZW50U29ja2V0KTsKICB9KTsKICBjbGllbnRTb2NrZXQub24oJ2Vycm9yJywgKCkgPT4ge30pOwogIHNlcnZlclNvY2tldC5vbignZXJyb3InLCAoKSA9PiB7fSk7Cn0pLmxpc3Rlbihwb3J0LCAoKSA9PiB7CiAgY29uc29sZS5sb2coJ1R1bm5lbCBPbW5pTWVkaWEgcm9kYW5kbyBuYSBwb3J0YSAnICsgcG9ydCk7Cn0pOw==";
-
   return `@echo off
 chcp 65001 >nul
 title OmniMedia — ${acc.name} (${acc.country})
-color 0B
 echo ============================================
-echo   OmniMedia Browser Launcher
-echo   Perfil : ${acc.name}
-echo   Proxy  : ${px.host}:${px.port}
-echo   Pais   : ${acc.country}
+echo   Abrindo Chrome: ${acc.name}
+echo   Pais: ${acc.country} | Proxy: ${px.host}:${px.port}
 echo ============================================
 echo.
 
-if not exist "C:\\\\OmniMedia" mkdir "C:\\\\OmniMedia"
+if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
 
-rem 1. Localiza o Google Chrome
+echo Atualizando tunnel proxy...
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '${SITE_URL_INNER}/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
+
+set "TUNNEL_READY=0"
+where node >nul 2>nul
+if %errorlevel%==0 (
+  if exist "C:\\OmniMedia\\tunnel.js" (
+${hasAuth ? `    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort}"') do taskkill /F /PID %%a >nul 2>&1
+    start /min "OmniTunnel:${tunnelPort}" cmd /k "node C:\\OmniMedia\\tunnel.js ${tunnelPort} ${px.host} ${px.port} ${px.user} ${px.pass}"
+    set "TUNNEL_READY=1"
+    timeout /t 3 >nul` : '    rem Sem autenticacao'}
+  )
+)
+
 set "CHROME="
 for %%P in (
-  "%ProgramFiles%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe"
-  "%ProgramFiles(x86)%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe"
-  "%LocalAppData%\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe"
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
 ) do (
   if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
 )
 
 if not defined CHROME (
-  echo ERRO: Google Chrome nao foi encontrado neste computador!
-  echo Por favor, instale o Chrome e tente novamente.
-  pause
-  exit /b 1
+  echo ERRO: Chrome nao encontrado!
+  timeout /t 3 >nul & exit /b 1
 )
 
-${hasAuth ? `
-rem 2. Localiza o Node.js para o Proxy Tunnel
-set "NODE_BIN="
-where node >nul 2>nul && set "NODE_BIN=node"
-if not defined NODE_BIN if exist "%ProgramFiles%\\\\nodejs\\\\node.exe" set "NODE_BIN=%ProgramFiles%\\\\nodejs\\\\node.exe"
-if not defined NODE_BIN if exist "%ProgramFiles(x86)%\\\\nodejs\\\\node.exe" set "NODE_BIN=%ProgramFiles(x86)%\\\\nodejs\\\\node.exe"
-if not defined NODE_BIN if exist "%LocalAppData%\\\\Programs\\\\node\\\\node.exe" set "NODE_BIN=%LocalAppData%\\\\Programs\\\\node\\\\node.exe"
-
-if defined NODE_BIN (
-  echo Criando arquivo de tunnel...
-  powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${tunnelB64}')) | Out-File -FilePath 'C:\\\\OmniMedia\\\\tunnel_${tunnelPort}.js' -Encoding utf8" 2>nul
-
-  echo Encerrando tunnels antigos na porta ${tunnelPort}...
-  for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${tunnelPort} " 2^>nul') do taskkill /F /PID %%a >nul 2>&1
-
-  echo Iniciando Proxy Tunnel na porta ${tunnelPort}...
-  start /min "OmniTunnel:${tunnelPort}" cmd /k ""%NODE_BIN%" "C:\\\\OmniMedia\\\\tunnel_${tunnelPort}.js" ${tunnelPort} ${px.host} ${px.port} "${px.user}" "${px.pass}""
-  timeout /t 3 >nul
-
-  echo Abrindo Chrome com Proxy Tunelado (SOCKS5)...
+if "%TUNNEL_READY%"=="1" (
   start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="socks5://127.0.0.1:${tunnelPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 ) else (
-  echo AVISO: Node.js nao encontrado. Abrindo Chrome com proxy direto...
   start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 )
-` : `
-echo Abrindo Chrome com proxy direto...
-start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://${px.host}:${px.port}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-`}
-
-echo.
-echo ============================================
-echo   Chrome iniciado com sucesso!
-echo ============================================
-echo.
-timeout /t 5 >nul
 `;
 }
+
 
 
 

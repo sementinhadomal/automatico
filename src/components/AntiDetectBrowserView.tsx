@@ -353,7 +353,7 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
   );
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedScript, setExpandedScript] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'accounts' | 'proxy' | 'profiles' | 'bulk' | 'tutorial'>('accounts');
+  const [activeTab, setActiveTab] = useState<'proxy' | 'profiles' | 'bulk' | 'tutorial'>('profiles');
   const [copiedScript, setCopiedScript] = useState(false);
 
   // ─── Estado do Gerenciamento de Contas (embutido) ──────────────────────────
@@ -810,9 +810,8 @@ pause`;
       {/* Sub Tabs */}
       <div className="flex items-center gap-2 border-b border-[var(--border-color)] pb-2 overflow-x-auto">
         {[
-          { id: 'accounts', label: '👤 Contas & Proxies' },
+          { id: 'profiles', label: '💻 Perfis & Launchers' },
           { id: 'proxy', label: '⚡ Colar Proxy Rápido' },
-          { id: 'profiles', label: '💻 Perfis / Launcher por Conta' },
           { id: 'bulk', label: 'Exportar (AdsPower / GoLogin)' },
           { id: 'tutorial', label: 'Como Funciona' },
         ].map((tab) => (
@@ -830,8 +829,8 @@ pause`;
         ))}
       </div>
 
-      {/* 👤 Contas & Proxies Tab */}
-      {activeTab === 'accounts' && (
+      {/* 💻 Perfis & Launchers Tab */}
+      {activeTab === 'profiles' && (
         <div className="space-y-4">
           {/* Toolbar */}
           <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -1176,10 +1175,39 @@ pause`;
         </div>
       )}
 
-      {/* Profiles Grid */}
+      {/* \uD83D\uDCBB Perfis & Launchers (tab unificada) */}
       {activeTab === 'profiles' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredAccounts.map((acc) => {
+        <div className="space-y-4">
+          {/* Toolbar */}
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                placeholder="Buscar por nome, usu\u00E1rio ou pa\u00EDs..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-purple-500"
+              />
+            </div>
+            <button
+              onClick={() => setIsBulkImportOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-600/20 transition-all cursor-pointer shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Importar Proxies em Lote
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredAccounts
+            .filter(acc =>
+              !searchTerm ||
+              acc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              acc.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              acc.country.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            .map((acc) => {
             const status = sessionStatuses[acc.id];
             const puppeteerScript = AntiDetectProfileManager.generatePuppeteerLaunchScript(acc);
             const isExpanded = expandedScript === acc.id;
@@ -1266,6 +1294,15 @@ pause`;
 
                   {/* Actions */}
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setEditingAccountId(acc.id)}
+                      className="px-3 py-2.5 rounded-xl bg-purple-600/10 text-purple-400 border border-purple-500/30 hover:bg-purple-600/20 font-bold text-xs transition-all flex items-center gap-1.5"
+                      title="Editar Proxy"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      Proxy
+                    </button>
+
                     {status !== 'LAUNCHING' && (
                       <button
                         onClick={() => handleLaunch(acc)}
@@ -1336,6 +1373,70 @@ pause`;
               </div>
             );
           })}
+          </div>
+
+          {/* Bulk Import Modal */}
+          {isBulkImportOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-xl">
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">Importar Proxies em Lote</h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Cole uma lista de proxies no formato <code className="text-purple-400 font-mono">ip:porta:usuario:senha</code> (um por linha).
+                </p>
+                <textarea
+                  rows={6}
+                  value={bulkProxyText}
+                  onChange={(e) => setBulkProxyText(e.target.value)}
+                  placeholder={`82.140.183.78:49155:thaisrafipv:KxjbNhyGPj\n185.220.101.5:49156:user2:pass2`}
+                  className="w-full rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] p-3 text-xs font-mono text-[var(--text-primary)] focus:border-purple-500 focus:outline-none"
+                />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setIsBulkImportOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all cursor-pointer">Cancelar</button>
+                  <button
+                    onClick={() => {
+                      const lines = bulkProxyText.split('\n').map(l => l.trim()).filter(Boolean);
+                      let idx = 0;
+                      const updated = accounts.map(acc => {
+                        const inView = filteredAccounts.some(f => f.id === acc.id);
+                        if (inView && idx < lines.length) {
+                          const parts = lines[idx].split(':');
+                          idx++;
+                          return { ...acc, proxy: { ...acc.proxy, ip: parts[0], port: parseInt(parts[1] || '8080'), username: parts[2] || '', password: parts[3] || '', status: 'ACTIVE' as const } };
+                        }
+                        return acc;
+                      });
+                      onUpdateAccounts(updated);
+                      setBulkProxyText('');
+                      setIsBulkImportOpen(false);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                  >
+                    Salvar Proxies
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Proxy Modal */}
+          {editingAccountId && (() => {
+            const editAcc = accounts.find(a => a.id === editingAccountId);
+            if (!editAcc) return null;
+            return (
+              <EditProxyModal
+                account={editAcc}
+                onClose={() => setEditingAccountId(null)}
+                onSave={(ip, port, user, pass, protocol) => {
+                  const updated = accounts.map(a => a.id === editingAccountId
+                    ? { ...a, proxy: { ...a.proxy, ip, port, username: user, password: pass, protocol: protocol as import('@/types').ProxyProtocol, status: 'ACTIVE' as const } }
+                    : a
+                  );
+                  onUpdateAccounts(updated);
+                  setEditingAccountId(null);
+                }}
+              />
+            );
+          })()}
         </div>
       )}
 

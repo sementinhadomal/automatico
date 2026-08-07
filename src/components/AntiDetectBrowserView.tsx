@@ -120,24 +120,33 @@ server.on('connect', (req, clientSocket, head) => {
         connectStr += '\\r\\n';
         pSocket.write(connectStr);
     });
+    
     let connected = false;
-    pSocket.on('data', (chunk) => {
+    const onProxyData = (chunk) => {
         if (!connected) {
-            const reply = chunk.toString();
-            if (reply.startsWith('HTTP/1.0 200') || reply.startsWith('HTTP/1.1 200')) {
+            const reply = chunk.toString('utf8');
+            if (reply.match(/^HTTP\/\d\.\d 200/i)) {
                 connected = true;
                 clientSocket.write('HTTP/1.1 200 Connection Established\\r\\n\\r\\n');
+                
                 const hEnd = chunk.indexOf('\\r\\n\\r\\n');
-                if (hEnd !== -1 && chunk.length > hEnd + 4) clientSocket.write(chunk.slice(hEnd + 4));
+                if (hEnd !== -1 && chunk.length > hEnd + 4) {
+                    clientSocket.write(chunk.slice(hEnd + 4));
+                }
+                
                 if (head && head.length > 0) pSocket.write(head);
+                
+                pSocket.removeListener('data', onProxyData);
+                pSocket.pipe(clientSocket);
+                clientSocket.pipe(pSocket);
             } else {
                 clientSocket.write(chunk);
+                clientSocket.end();
             }
-        } else {
-            clientSocket.write(chunk);
         }
-    });
-    clientSocket.on('data', (chunk) => { if (connected) pSocket.write(chunk); });
+    };
+    
+    pSocket.on('data', onProxyData);
     pSocket.on('error', () => clientSocket.destroy());
     clientSocket.on('error', () => pSocket.destroy());
 });

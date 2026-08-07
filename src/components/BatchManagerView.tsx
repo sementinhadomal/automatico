@@ -14,7 +14,7 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
   const [isUploading, setIsUploading] = useState(false);
   const [globalCaption, setGlobalCaption] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  const [durationMonths, setDurationMonths] = useState(1);
+  const [postsPerDay, setPostsPerDay] = useState(3);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,14 +68,11 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
     // Shuffle uploaded urls to randomize video order
     const shuffledUrls = [...uploadedUrls].sort(() => Math.random() - 0.5);
 
-    const totalDays = durationMonths * 30;
-    const daysPerPost = totalDays / (shuffledUrls.length || 1);
-
     for (let i = 0; i < shuffledUrls.length; i++) {
-      const dayOffset = Math.floor(i * daysPerPost);
+      const dayIndex = Math.floor(i / postsPerDay);
       
       const postDate = new Date(currentDate);
-      postDate.setDate(postDate.getDate() + dayOffset);
+      postDate.setDate(postDate.getDate() + dayIndex);
       
       // Randomize hour between 9 and 20
       const randomHour = 9 + Math.floor(Math.random() * 11);
@@ -475,17 +472,15 @@ pause
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5">Espalhar Lote por</label>
-              <select
-                value={durationMonths}
-                onChange={(e) => setDurationMonths(Number(e.target.value))}
+              <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5">Posts por Dia</label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={postsPerDay}
+                onChange={(e) => setPostsPerDay(Number(e.target.value))}
                 className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
-              >
-                <option value={1}>1 Mês (30 dias)</option>
-                <option value={2}>2 Meses (60 dias)</option>
-                <option value={3}>3 Meses (90 dias)</option>
-                <option value={4}>4 Meses (120 dias)</option>
-              </select>
+              />
             </div>
             <div>
               <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5">Data de Início</label>

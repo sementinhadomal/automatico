@@ -20,14 +20,10 @@ import {
 } from 'lucide-react';
 
 export type TabType =
-  | 'antidetect_browser'
   | 'dashboard'
   | 'analytics'
+  | 'antidetect_browser'
   | 'library'
-  | 'media_downloader'
-  | 'sharp_editor'
-  | 'ffmpeg_editor'
-  | 'video_lab_pro'
   | 'batches'
   | 'auto_publisher'
   | 'history'
@@ -46,9 +42,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: 'analytics', label: 'Análise de Engajamento', icon: TrendingUp, badge: 'PRO' },
     { id: 'antidetect_browser', label: 'Contas & Navegador Anti-Detect', icon: Monitor, badge: '20' },
     { id: 'library', label: 'Biblioteca Central', icon: FolderKanban },
-    { id: 'media_downloader', label: 'Downloader HD por Link', icon: Download, badge: 'HD' },
-    { id: 'sharp_editor', label: 'Editor Sharp (Foto)', icon: ImageIcon, badge: 'Auto' },
-    { id: 'ffmpeg_editor', label: 'Editor FFmpeg (Vídeo)', icon: VideoIcon, badge: 'Auto' },
     { id: 'batches', label: 'Upload em Lotes & Agenda', icon: CalendarDays },
     { id: 'auto_publisher', label: 'Motor de Publicação', icon: Send },
     { id: 'history', label: 'Histórico de Posts', icon: History },

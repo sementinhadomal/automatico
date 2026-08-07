@@ -14,8 +14,6 @@ import { Sidebar, TabType } from '@/components/Sidebar';
 import { DashboardView } from '@/components/DashboardView';
 import { AccountsView } from '@/components/AccountsView';
 import { CentralLibraryView } from '@/components/CentralLibraryView';
-import { ImageStudioView } from '@/components/ImageStudioView';
-import { VideoStudioView } from '@/components/VideoStudioView';
 import { CampaignsView } from '@/components/CampaignsView';
 import { AutoPublisherView } from '@/components/AutoPublisherView';
 import { ExecutionHistoryView } from '@/components/ExecutionHistoryView';
@@ -25,8 +23,6 @@ import { SystemLogsQueueView } from '@/components/SystemLogsQueueView';
 import { BatchManagerView } from '@/components/BatchManagerView';
 import { AntiDetectBrowserView } from '@/components/AntiDetectBrowserView';
 import { AnalyticsDashboardView } from '@/components/AnalyticsDashboardView';
-import { MediaDownloaderView } from '@/components/MediaDownloaderView';
-import { VideoLabView } from '@/components/VideoLabView';
 
 export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -135,21 +131,6 @@ export default function Home() {
               onUpdateMediaAssets={setMediaAssets}
             />
           )}
-
-          {activeTab === 'media_downloader' && (
-            <MediaDownloaderView
-              accounts={accounts}
-              mediaAssets={mediaAssets}
-              selectedCategory={selectedCategory}
-              onImportToLibrary={(newAssets) => setMediaAssets([...newAssets, ...mediaAssets])}
-            />
-          )}
-
-          {activeTab === 'sharp_editor' && <ImageStudioView mediaAssets={mediaAssets} />}
-
-          {activeTab === 'ffmpeg_editor' && <VideoStudioView mediaAssets={mediaAssets} />}
-
-          {activeTab === 'video_lab_pro' && <VideoLabView />}
 
           {activeTab === 'batches' && (
             <BatchManagerView

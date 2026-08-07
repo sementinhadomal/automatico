@@ -14,6 +14,8 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
   const [isUploading, setIsUploading] = useState(false);
   const [globalCaption, setGlobalCaption] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+  const [postsPerDay, setPostsPerDay] = useState(3);
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +57,37 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
     const targetAccount = accounts.find(a => a.id === selectedAccountId);
     if (!targetAccount) return;
 
+    // Generate Agenda
+    const agenda = [];
+    let currentDate = new Date(startDate);
+    currentDate.setHours(0, 0, 0, 0); // Start of day
+    
+    // Spread posts throughout the day (e.g. 9 AM to 8 PM = 11 hours)
+    // 11 hours = 660 minutes.
+    
+    for (let i = 0; i < uploadedUrls.length; i++) {
+      const dayIndex = Math.floor(i / postsPerDay);
+      const postInDay = i % postsPerDay;
+      
+      const postDate = new Date(currentDate);
+      postDate.setDate(postDate.getDate() + dayIndex);
+      
+      // Randomize hour between 9 and 20
+      const randomHour = 9 + Math.floor(Math.random() * 11);
+      const randomMinute = Math.floor(Math.random() * 60);
+      postDate.setHours(randomHour, randomMinute, 0, 0);
+      
+      agenda.push({
+        id: `post_${Date.now()}_${i}`,
+        url: uploadedUrls[i],
+        caption: globalCaption,
+        scheduledFor: postDate.toISOString(),
+        done: false
+      });
+    }
+
+    const agendaJson = JSON.stringify(agenda, null, 2);
+
     const puppeteerScript = `
 const http = require('http');
 const net = require('net');
@@ -65,10 +98,25 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
-const VIDS = ${JSON.stringify(uploadedUrls)};
-const CAPTION = ${JSON.stringify(globalCaption)};
 const [, , CHROME_PATH, cdpPort, profileDir, langCode, hasProxyStr, lPort, tHost, tPort, user, pass] = process.argv;
 const hasProxy = hasProxyStr === 'true';
+
+const agendaPath = path.join(__dirname, 'agenda.json');
+if (!fs.existsSync(agendaPath)) {
+    console.log('Nenhuma agenda encontrada.');
+    process.exit(0);
+}
+
+const agenda = JSON.parse(fs.readFileSync(agendaPath, 'utf8'));
+const pendingPosts = agenda.filter(p => !p.done && new Date(p.scheduledFor) <= new Date());
+
+if (pendingPosts.length === 0) {
+    console.log('[' + new Date().toISOString() + '] Nenhum post agendado para o momento atual.');
+    process.exit(0);
+}
+
+// Post apenas o primeiro da fila para nao sobrecarregar
+const postToRun = pendingPosts[0];
 
 async function downloadVideo(url, dest) {
   return new Promise((resolve, reject) => {
@@ -129,12 +177,12 @@ if (hasProxy) {
         pSocket.on('error', () => clientSocket.destroy());
         clientSocket.on('error', () => pSocket.destroy());
     });
-    proxyServer.listen(Number(lPort), '127.0.0.1', () => console.log('Túnel local ativo na porta', lPort));
+    proxyServer.listen(Number(lPort), '127.0.0.1');
 }
 
 // 2. Iniciar Chrome Furtivo (Stealth) e Postar
 async function run() {
-  console.log('Iniciando Motor AntiDetect Stealth para Postagem Autônoma...');
+  console.log('Iniciando Motor para Postagem Agendada:', postToRun.id);
   const args = [
       '--disable-ipv6',
       '--remote-debugging-port=' + cdpPort,
@@ -153,17 +201,16 @@ async function run() {
       args.push('--no-proxy-server');
   }
 
+  let browser;
   try {
-    const browser = await puppeteer.launch({
+    browser = await puppeteer.launch({
         executablePath: CHROME_PATH,
-        headless: false,
+        headless: true, // Modo Invisivel (Fantasma)
         userDataDir: profileDir,
         args: args,
         defaultViewport: null,
         ignoreDefaultArgs: ['--enable-automation']
     });
-    
-    console.log('Navegador Blindado Aberto!');
     
     const pages = await browser.pages();
     let igPage = pages.find(p => p.url().includes('instagram.com'));
@@ -174,81 +221,79 @@ async function run() {
     } else {
        await igPage.bringToFront();
     }
+    
+    console.log('[WORKER] Baixando vídeo da nuvem...');
+    const tempPath = path.join(__dirname, 'temp_video.mp4');
+    await downloadVideo(postToRun.url, tempPath);
+    
+    console.log('[WORKER] Clicando em Nova Publicação...');
+    await igPage.waitForSelector('svg[aria-label="New post"]', { timeout: 15000 }).catch(()=>null);
+    await igPage.evaluate(() => {
+       const svgs = Array.from(document.querySelectorAll('svg[aria-label="New post"]'));
+       if (svgs.length > 0) svgs[0].closest('a, [role="button"]').click();
+    });
+    
+    await igPage.waitForTimeout(3000);
+    const [fileChooser] = await Promise.all([
+      igPage.waitForFileChooser(),
+      igPage.evaluate(() => {
+         const btns = Array.from(document.querySelectorAll('button'));
+         const select = btns.find(b => b.innerText.includes('Select from computer') || b.innerText.includes('Selecionar do computador'));
+         if (select) select.click();
+      })
+    ]);
+    await fileChooser.accept([tempPath]);
+    
+    console.log('[WORKER] Avançando opções...');
+    await igPage.waitForTimeout(3000);
+    await igPage.evaluate(() => {
+       const nexts = Array.from(document.querySelectorAll('div[role="button"]'));
+       const n = nexts.find(b => b.innerText === 'Next' || b.innerText === 'Avançar');
+       if (n) n.click();
+    });
+    await igPage.waitForTimeout(2000);
+    await igPage.evaluate(() => {
+       const nexts = Array.from(document.querySelectorAll('div[role="button"]'));
+       const n = nexts.find(b => b.innerText === 'Next' || b.innerText === 'Avançar');
+       if (n) n.click();
+    });
+    
+    console.log('[WORKER] Inserindo Legenda...');
+    await igPage.waitForTimeout(2000);
+    await igPage.evaluate((caption) => {
+       const el = document.querySelector('div[aria-label="Write a caption..."], div[aria-label="Escreva uma legenda..."]');
+       if (el) {
+           el.focus();
+           document.execCommand('insertText', false, caption);
+       }
+    }, postToRun.caption);
+    
+    console.log('[WORKER] Compartilhando!');
+    await igPage.waitForTimeout(1500);
+    await igPage.evaluate(() => {
+       const share = Array.from(document.querySelectorAll('div[role="button"]'));
+       const s = share.find(b => b.innerText === 'Share' || b.innerText === 'Compartilhar');
+       if (s) s.click();
+    });
+    
+    console.log('[WORKER] Aguardando upload finalizar...');
+    await igPage.waitForTimeout(15000);
+    fs.unlinkSync(tempPath);
+    
+    console.log('[WORKER] Post efetuado com sucesso!');
+    
+    // Mark as done
+    postToRun.done = true;
+    const itemIndex = agenda.findIndex(p => p.id === postToRun.id);
+    if (itemIndex > -1) agenda[itemIndex] = postToRun;
+    fs.writeFileSync(agendaPath, JSON.stringify(agenda, null, 2));
 
-    console.log('Logado no Instagram! Iniciando postagem de ' + VIDS.length + ' vídeos...');
-    
-    for (let i = 0; i < VIDS.length; i++) {
-        console.log('\\n[LOTE] Baixando vídeo ' + (i+1) + '/' + VIDS.length + ' da nuvem...');
-        const tempPath = path.join(__dirname, 'temp_video_' + i + '.mp4');
-        await downloadVideo(VIDS[i], tempPath);
-        
-        console.log('[LOTE] Vídeo baixado. Clicando em Nova Publicação...');
-        await igPage.waitForSelector('svg[aria-label="New post"]', { timeout: 15000 }).catch(()=>null);
-        await igPage.evaluate(() => {
-           const svgs = Array.from(document.querySelectorAll('svg[aria-label="New post"]'));
-           if (svgs.length > 0) svgs[0].closest('a, [role="button"]').click();
-        });
-        
-        await igPage.waitForTimeout(3000);
-        const [fileChooser] = await Promise.all([
-          igPage.waitForFileChooser(),
-          igPage.evaluate(() => {
-             const btns = Array.from(document.querySelectorAll('button'));
-             const select = btns.find(b => b.innerText.includes('Select from computer') || b.innerText.includes('Selecionar do computador'));
-             if (select) select.click();
-          })
-        ]);
-        await fileChooser.accept([tempPath]);
-        
-        console.log('[LOTE] Avançando opções...');
-        await igPage.waitForTimeout(3000);
-        await igPage.evaluate(() => {
-           const nexts = Array.from(document.querySelectorAll('div[role="button"]'));
-           const n = nexts.find(b => b.innerText === 'Next' || b.innerText === 'Avançar');
-           if (n) n.click();
-        });
-        await igPage.waitForTimeout(2000);
-        await igPage.evaluate(() => {
-           const nexts = Array.from(document.querySelectorAll('div[role="button"]'));
-           const n = nexts.find(b => b.innerText === 'Next' || b.innerText === 'Avançar');
-           if (n) n.click();
-        });
-        
-        console.log('[LOTE] Inserindo Legenda Global...');
-        await igPage.waitForTimeout(2000);
-        await igPage.evaluate((caption) => {
-           const el = document.querySelector('div[aria-label="Write a caption..."], div[aria-label="Escreva uma legenda..."]');
-           if (el) {
-               el.focus();
-               document.execCommand('insertText', false, caption);
-           }
-        }, CAPTION);
-        
-        console.log('[LOTE] Compartilhando!');
-        await igPage.waitForTimeout(1500);
-        await igPage.evaluate(() => {
-           const share = Array.from(document.querySelectorAll('div[role="button"]'));
-           const s = share.find(b => b.innerText === 'Share' || b.innerText === 'Compartilhar');
-           if (s) s.click();
-        });
-        
-        console.log('[LOTE] Aguardando upload finalizar...');
-        await igPage.waitForTimeout(15000);
-        fs.unlinkSync(tempPath);
-        
-        console.log('[LOTE] Vídeo ' + (i+1) + ' postado com sucesso!');
-        if (i < VIDS.length - 1) {
-            console.log('Aguardando 5 minutos para o próximo...');
-            await igPage.waitForTimeout(300000); // 5 min
-        }
-    }
-    
-    console.log('\\n[SUCESSO] Todos os ' + VIDS.length + ' vídeos do Lote foram postados!');
     await browser.close();
     if (proxyServer) proxyServer.close();
     process.exit(0);
   } catch (err) {
-    console.error('Erro Fatal no Robô:', err);
+    console.error('Erro no Worker:', err);
+    if (browser) await browser.close();
     if (proxyServer) proxyServer.close();
     process.exit(1);
   }
@@ -256,7 +301,8 @@ async function run() {
 run();
 `;
 
-    const b64Script = Buffer.from(puppeteerScript.replace('headless: false', 'headless: true')).toString('base64');
+    const b64Script = Buffer.from(puppeteerScript).toString('base64');
+    const b64Agenda = Buffer.from(agendaJson).toString('base64');
     
     // Proxy parsing logic
     const px = targetAccount.proxy;
@@ -271,7 +317,7 @@ run();
     const batScript = `@echo off
 chcp 65001 >nul
 echo =======================================================
-echo     ROBO PUBLICADOR OMNIMEDIA - MODO FANTASMA
+echo     ROBO PUBLICADOR OMNIMEDIA - INSTALADOR DE AGENDA
 echo     Conta Alvo: ${targetAccount.name}
 echo =======================================================
 echo.
@@ -282,10 +328,11 @@ IF NOT EXIST "C:\\OmniMedia\\Profiles\\${targetAccount.id}" (
     pause & exit /b 1
 )
 
-IF NOT EXIST "C:\\OmniMedia\\Engine" (
-    mkdir "C:\\OmniMedia\\Engine"
-)
-cd /d "C:\\OmniMedia\\Engine"
+set "ENGINE=C:\\OmniMedia\\Engine"
+set "ACC_DIR=%ENGINE%\\${targetAccount.id}"
+
+IF NOT EXIST "%ENGINE%" mkdir "%ENGINE%"
+cd /d "%ENGINE%"
 
 IF NOT EXIST "node_modules\\puppeteer-extra-plugin-stealth" (
     echo [1/3] Preparando bibliotecas de automacao furtiva...
@@ -293,25 +340,32 @@ IF NOT EXIST "node_modules\\puppeteer-extra-plugin-stealth" (
     call npm install puppeteer-extra puppeteer-extra-plugin-stealth puppeteer-core --no-fund --no-audit
 )
 
-echo [2/3] Localizando Chrome...
-set "CHROME="
-for %%P in (
-  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
-  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
-  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
-) do (
-  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
-)
-if not defined CHROME (
-  echo ERRO: Google Chrome nao encontrado!
-  pause & exit /b 1
-)
+IF NOT EXIST "%ACC_DIR%" mkdir "%ACC_DIR%"
 
-echo [3/3] Iniciando Robô Fantasma...
-powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64Script}')) | Set-Content -Path 'postador_fantasma.js' -Encoding Ascii" 2>nul
+echo [2/3] Criando arquivos da agenda...
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64Script}')) | Set-Content -Path '%ACC_DIR%\\worker.js' -Encoding Ascii" 2>nul
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64Agenda}')) | Set-Content -Path '%ACC_DIR%\\agenda.json' -Encoding Ascii" 2>nul
 
-echo O Robo esta rodando em segundo plano! Nao feche esta janela ate que termine.
-node postador_fantasma.js "%CHROME%" "${cdpPort}" "${profileDir}" "${targetAccount.languageCode}" "${hasProxy}" "${tunnelPort}" "${px.ip}" "${parsedPort}" "${px.username || ''}" "${px.password || ''}"
+echo set WshShell = CreateObject("WScript.Shell") > "%ACC_DIR%\\invisible.vbs"
+echo WshShell.Run chr(34) ^& "%ACC_DIR%\\run.bat" ^& Chr(34), 0 >> "%ACC_DIR%\\invisible.vbs"
+echo set WshShell = Nothing >> "%ACC_DIR%\\invisible.vbs"
+
+echo @echo off > "%ACC_DIR%\\run.bat"
+echo chcp 65001 ^^>nul >> "%ACC_DIR%\\run.bat"
+echo cd /d "%ACC_DIR%" >> "%ACC_DIR%\\run.bat"
+echo set "CHROME=" >> "%ACC_DIR%\\run.bat"
+echo for %%%%P in ("%%ProgramFiles%%\\Google\\Chrome\\Application\\chrome.exe" "%%ProgramFiles(x86)%%\\Google\\Chrome\\Application\\chrome.exe" "%%LocalAppData%%\\Google\\Chrome\\Application\\chrome.exe") do if exist "%%%%~P" if not defined CHROME set "CHROME=%%%%~P" >> "%ACC_DIR%\\run.bat"
+echo node worker.js "%%CHROME%%" "${cdpPort}" "${profileDir}" "${targetAccount.languageCode}" "${hasProxy}" "${tunnelPort}" "${px.ip}" "${parsedPort}" "${px.username || ''}" "${px.password || ''}" >> "%ACC_DIR%\\run.bat"
+
+echo [3/3] Registrando Despertador no Windows...
+schtasks /create /sc minute /mo 30 /tn "OmniMedia_${targetAccount.id}" /tr "wscript \\"%ACC_DIR%\\invisible.vbs\\"" /f
+
+echo.
+echo ======================================================================
+echo PARABENS! A Agenda da conta ${targetAccount.name} foi ativada.
+echo O Windows vai checar a agenda de hora em hora silenciosamente e
+echo postar seus conteudos furtivamente nas datas marcadas.
+echo ======================================================================
 pause
 `;
 
@@ -413,6 +467,29 @@ pause
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5">Posts por Dia</label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={postsPerDay}
+                onChange={(e) => setPostsPerDay(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5">Data de Início</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+              />
+            </div>
           </div>
 
           <button

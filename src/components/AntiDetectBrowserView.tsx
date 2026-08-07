@@ -110,7 +110,12 @@ const server = http.createServer((req, res) => {
 });
 server.on('connect', (req, clientSocket, head) => {
     const pSocket = net.connect(Number(tPort), tHost, () => {
-        let connectStr = 'CONNECT ' + req.url + ' HTTP/1.1\\r\\nHost: ' + req.url + '\\r\\n';
+        let connectStr = 'CONNECT ' + req.url + ' HTTP/1.1\\r\\n';
+        for (let i = 0; i < req.rawHeaders.length; i += 2) {
+            if (req.rawHeaders[i].toLowerCase() !== 'proxy-authorization') {
+                connectStr += req.rawHeaders[i] + ': ' + req.rawHeaders[i+1] + '\\r\\n';
+            }
+        }
         if (hasAuth) connectStr += 'Proxy-Authorization: Basic ' + auth + '\\r\\n';
         connectStr += '\\r\\n';
         pSocket.write(connectStr);

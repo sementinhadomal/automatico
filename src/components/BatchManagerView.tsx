@@ -104,7 +104,9 @@ const net = require('net');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
-const puppeteer = require('puppeteer-extra');
+const puppeteerCore = require('puppeteer-core');
+const { addExtra } = require('puppeteer-extra');
+const puppeteer = addExtra(puppeteerCore);
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 

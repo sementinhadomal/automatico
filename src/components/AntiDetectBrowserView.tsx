@@ -52,7 +52,8 @@ function buildBatScript(acc: Account, px: { host: string; port: string; user: st
   const engineCode = `
 const http = require('http');
 const net = require('net');
-const puppeteer = require('puppeteer-extra');
+const { addExtra } = require('puppeteer-extra');
+const puppeteer = addExtra(require('puppeteer-core'));
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
@@ -203,6 +204,12 @@ echo.
 echo Iniciando sessao blindada para ${acc.name}...
 echo.
 node launcher.js "%CHROME%" "${cdpPort}" "${profileDir}" "${acc.languageCode}" "${hasProxy}" "${tunnelPort}" "${px.host}" "${parsedPort}" "${px.user}" "${px.pass}"
+
+if %errorlevel% neq 0 (
+  echo.
+  echo [ERRO FATAL] O motor falhou ao iniciar. Verifique o log acima.
+  pause
+)
 
 exit /b 0
 `;

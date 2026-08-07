@@ -56,16 +56,19 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
     if (!targetAccount) return;
 
     const puppeteerScript = `
-const puppeteer = require('puppeteer-core');
+const http = require('http');
+const net = require('net');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
 const VIDS = ${JSON.stringify(uploadedUrls)};
 const CAPTION = ${JSON.stringify(globalCaption)};
-const baseSeed = Math.abs('${targetAccount.id}'.split('').reduce((a, b) => a + b.charCodeAt(0), 0));
-const CDP_PORT = (10800 + (baseSeed % 500)) + 1000;
-const CHROME_DEBUG_URL = 'http://127.0.0.1:' + CDP_PORT;
+const [, , CHROME_PATH, cdpPort, profileDir, langCode, hasProxyStr, lPort, tHost, tPort, user, pass] = process.argv;
+const hasProxy = hasProxyStr === 'true';
 
 async function downloadVideo(url, dest) {
   return new Promise((resolve, reject) => {
@@ -82,11 +85,85 @@ async function downloadVideo(url, dest) {
   });
 }
 
+// 1. Iniciar Túnel Proxy se existir
+let proxyServer = null;
+if (hasProxy) {
+    const hasAuth = user && user.trim().length > 0;
+    const auth = hasAuth ? Buffer.from(user + ':' + pass).toString('base64') : '';
+    
+    proxyServer = http.createServer((req, res) => {
+        const headers = Object.assign({}, req.headers);
+        if (hasAuth) headers['Proxy-Authorization'] = 'Basic ' + auth;
+        const options = { hostname: tHost, port: Number(tPort), path: req.url, method: req.method, headers: headers };
+        const proxyReq = http.request(options, (proxyRes) => { res.writeHead(proxyRes.statusCode, proxyRes.headers); proxyRes.pipe(res); });
+        proxyReq.on('error', (e) => res.end());
+        req.pipe(proxyReq);
+    });
+    proxyServer.on('connect', (req, clientSocket, head) => {
+        const pSocket = net.connect(Number(tPort), tHost, () => {
+            let connectStr = 'CONNECT ' + req.url + ' HTTP/1.1\\r\\n';
+            for (let i = 0; i < req.rawHeaders.length; i += 2) {
+                if (req.rawHeaders[i].toLowerCase() !== 'proxy-authorization') connectStr += req.rawHeaders[i] + ': ' + req.rawHeaders[i+1] + '\\r\\n';
+            }
+            if (hasAuth) connectStr += 'Proxy-Authorization: Basic ' + auth + '\\r\\n';
+            connectStr += '\\r\\n';
+            pSocket.write(connectStr);
+        });
+        let connected = false;
+        const onProxyData = (chunk) => {
+            if (!connected) {
+                const reply = chunk.toString('utf8');
+                if (reply.match(/^HTTP\\/\\d\\.\\d 200/i)) {
+                    connected = true;
+                    clientSocket.write('HTTP/1.1 200 Connection Established\\r\\n\\r\\n');
+                    const hEnd = chunk.indexOf('\\r\\n\\r\\n');
+                    if (hEnd !== -1 && chunk.length > hEnd + 4) clientSocket.write(chunk.slice(hEnd + 4));
+                    if (head && head.length > 0) pSocket.write(head);
+                    pSocket.removeListener('data', onProxyData);
+                    pSocket.pipe(clientSocket);
+                    clientSocket.pipe(pSocket);
+                } else { clientSocket.write(chunk); clientSocket.end(); }
+            }
+        };
+        pSocket.on('data', onProxyData);
+        pSocket.on('error', () => clientSocket.destroy());
+        clientSocket.on('error', () => pSocket.destroy());
+    });
+    proxyServer.listen(Number(lPort), '127.0.0.1', () => console.log('Túnel local ativo na porta', lPort));
+}
+
+// 2. Iniciar Chrome Furtivo (Stealth) e Postar
 async function run() {
-  console.log(' Conectando ao Antidetect Browser local na porta 49152...');
+  console.log('Iniciando Motor AntiDetect Stealth para Postagem Autônoma...');
+  const args = [
+      '--disable-ipv6',
+      '--remote-debugging-port=' + cdpPort,
+      '--lang=' + langCode.toLowerCase(),
+      '--restore-last-session',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-sync',
+      '--window-size=1280,800',
+      '--disable-infobars',
+      '--force-webrtc-ip-handling-policy=disable-non-proxied-udp'
+  ];
+  if (hasProxy) {
+      args.push('--proxy-server=http://127.0.0.1:' + lPort);
+  } else {
+      args.push('--no-proxy-server');
+  }
+
   try {
-    const browserURL = CHROME_DEBUG_URL;
-    const browser = await puppeteer.connect({ browserURL, defaultViewport: null });
+    const browser = await puppeteer.launch({
+        executablePath: CHROME_PATH,
+        headless: false,
+        userDataDir: profileDir,
+        args: args,
+        defaultViewport: null,
+        ignoreDefaultArgs: ['--enable-automation']
+    });
+    
+    console.log('Navegador Blindado Aberto!');
     
     const pages = await browser.pages();
     let igPage = pages.find(p => p.url().includes('instagram.com'));
@@ -98,7 +175,7 @@ async function run() {
        await igPage.bringToFront();
     }
 
-    console.log(' Logado no Instagram! Iniciando postagem de ' + VIDS.length + ' vídeos...');
+    console.log('Logado no Instagram! Iniciando postagem de ' + VIDS.length + ' vídeos...');
     
     for (let i = 0; i < VIDS.length; i++) {
         console.log('\\n[LOTE] Baixando vídeo ' + (i+1) + '/' + VIDS.length + ' da nuvem...');
@@ -106,15 +183,13 @@ async function run() {
         await downloadVideo(VIDS[i], tempPath);
         
         console.log('[LOTE] Vídeo baixado. Clicando em Nova Publicação...');
-        // Wait for Create post button (Desktop)
-        await igPage.waitForSelector('svg[aria-label="New post"]', { timeout: 10000 }).catch(()=>null);
+        await igPage.waitForSelector('svg[aria-label="New post"]', { timeout: 15000 }).catch(()=>null);
         await igPage.evaluate(() => {
            const svgs = Array.from(document.querySelectorAll('svg[aria-label="New post"]'));
            if (svgs.length > 0) svgs[0].closest('a, [role="button"]').click();
         });
         
-        // Wait for file input and upload
-        await igPage.waitForTimeout(2000);
+        await igPage.waitForTimeout(3000);
         const [fileChooser] = await Promise.all([
           igPage.waitForFileChooser(),
           igPage.evaluate(() => {
@@ -158,60 +233,85 @@ async function run() {
         });
         
         console.log('[LOTE] Aguardando upload finalizar...');
-        await igPage.waitForTimeout(10000); // Wait for upload to complete
-        
-        // Cleanup temp file
+        await igPage.waitForTimeout(15000);
         fs.unlinkSync(tempPath);
         
-        console.log('[LOTE] Vídeo ' + (i+1) + ' postado com sucesso! Aguardando 1 hora para o próximo...');
-        // Delay between posts in the batch (simulate human delay, e.g. 1 hour = 3600000)
-        // For testing we just wait 10 seconds.
+        console.log('[LOTE] Vídeo ' + (i+1) + ' postado com sucesso!');
         if (i < VIDS.length - 1) {
-            await igPage.waitForTimeout(10000); 
+            console.log('Aguardando 5 minutos para o próximo...');
+            await igPage.waitForTimeout(300000); // 5 min
         }
     }
     
     console.log('\\n[SUCESSO] Todos os ' + VIDS.length + ' vídeos do Lote foram postados!');
+    await browser.close();
+    if (proxyServer) proxyServer.close();
     process.exit(0);
   } catch (err) {
     console.error('Erro Fatal no Robô:', err);
+    if (proxyServer) proxyServer.close();
     process.exit(1);
   }
 }
 run();
 `;
 
+    const b64Script = Buffer.from(puppeteerScript.replace('headless: false', 'headless: true')).toString('base64');
+    
+    // Proxy parsing logic
+    const px = targetAccount.proxy;
+    const hasProxy = !!(px.ip && px.ip.trim() && px.ip !== 'sem-proxy');
+    const cleanPort = String(px.port).trim();
+    const isAdsPowerSocks = cleanPort === '49156';
+    const parsedPort = isAdsPowerSocks ? 49155 : (parseInt(cleanPort, 10) || 49155);
+    const tunnelPort = 10800 + (Math.abs(targetAccount.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
+    const cdpPort = tunnelPort + 1000;
+    const profileDir = `C:\\OmniMedia\\Profiles\\${targetAccount.id}`;
+
     const batScript = `@echo off
+chcp 65001 >nul
 echo =======================================================
-echo     ROBO PUBLICADOR OMNIMEDIA - LOTE
+echo     ROBO PUBLICADOR OMNIMEDIA - MODO FANTASMA
 echo     Conta Alvo: ${targetAccount.name}
 echo =======================================================
 echo.
-echo Verificando dependencias...
 
-IF NOT EXIST "%TEMP%\\omnimedia_poster" (
-    mkdir "%TEMP%\\omnimedia_poster"
-)
-cd /d "%TEMP%\\omnimedia_poster"
-
-IF NOT EXIST "node_modules\\puppeteer-core" (
-    echo Instalando motor de automacao local...
-    npm install puppeteer-core
+IF NOT EXIST "C:\\OmniMedia\\Profiles\\${targetAccount.id}" (
+    echo ERRO: O perfil dessa conta ainda nao existe!
+    echo Voce precisa abrir a conta pelo menos 1 vez na tela de 'Contas' para salvar seu login.
+    pause & exit /b 1
 )
 
-echo.
-echo Gerando script de postagem...
-> "postador.js" (
-echo ${puppeteerScript.replace(/\n/g, '\\n').replace(/"/g, '""')}
+IF NOT EXIST "C:\\OmniMedia\\Engine" (
+    mkdir "C:\\OmniMedia\\Engine"
+)
+cd /d "C:\\OmniMedia\\Engine"
+
+IF NOT EXIST "node_modules\\puppeteer-extra-plugin-stealth" (
+    echo [1/3] Preparando bibliotecas de automacao furtiva...
+    IF NOT EXIST "package.json" echo {} > package.json
+    call npm install puppeteer-extra puppeteer-extra-plugin-stealth puppeteer-core --no-fund --no-audit
 )
 
-echo.
-echo ATENCAO: Certifique-se de que a conta ${targetAccount.name}
-echo esta ABERTA no painel OmniMedia antes de continuar!
-echo.
-pause
-echo Iniciando Postagem...
-node postador.js
+echo [2/3] Localizando Chrome...
+set "CHROME="
+for %%P in (
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+) do (
+  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
+)
+if not defined CHROME (
+  echo ERRO: Google Chrome nao encontrado!
+  pause & exit /b 1
+)
+
+echo [3/3] Iniciando Robô Fantasma...
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${b64Script}')) | Set-Content -Path 'postador_fantasma.js' -Encoding Ascii" 2>nul
+
+echo O Robo esta rodando em segundo plano! Nao feche esta janela ate que termine.
+node postador_fantasma.js "%CHROME%" "${cdpPort}" "${profileDir}" "${targetAccount.languageCode}" "${hasProxy}" "${tunnelPort}" "${px.ip}" "${parsedPort}" "${px.username || ''}" "${px.password || ''}"
 pause
 `;
 

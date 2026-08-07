@@ -338,11 +338,7 @@ const EditProxyModal: React.FC<{
 
         {/* Fields */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">ID do AdsPower (Para Postagem em Lote)</label>
-            <input type="text" value={adsPowerId} onChange={(e) => setAdsPowerId(e.target.value)} placeholder="ex: j38s92k"
-              className="w-full rounded-xl bg-indigo-500/10 border border-indigo-500/30 p-2.5 text-xs font-mono text-indigo-300 focus:border-indigo-400 focus:outline-none" />
-          </div>
+
 
           <div className="col-span-2">
             <label className="text-[10px] font-semibold text-[var(--text-muted)] block mb-1">IP / Host do Proxy (Para Navegação Local)</label>

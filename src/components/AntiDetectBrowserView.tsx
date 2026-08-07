@@ -128,6 +128,7 @@ server.on('connect', (req, clientSocket, head) => {
                 clientSocket.write('HTTP/1.1 200 Connection Established\\r\\n\\r\\n');
                 const hEnd = chunk.indexOf('\\r\\n\\r\\n');
                 if (hEnd !== -1 && chunk.length > hEnd + 4) clientSocket.write(chunk.slice(hEnd + 4));
+                if (head && head.length > 0) pSocket.write(head);
             } else {
                 clientSocket.write(chunk);
             }

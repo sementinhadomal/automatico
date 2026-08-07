@@ -123,7 +123,8 @@ server.on('connect', (req, clientSocket, head) => {
     let connected = false;
     pSocket.on('data', (chunk) => {
         if (!connected) {
-            if (chunk.toString().includes('200')) {
+            const reply = chunk.toString();
+            if (reply.startsWith('HTTP/1.0 200') || reply.startsWith('HTTP/1.1 200')) {
                 connected = true;
                 clientSocket.write('HTTP/1.1 200 Connection Established\\r\\n\\r\\n');
                 const hEnd = chunk.indexOf('\\r\\n\\r\\n');

@@ -65,7 +65,7 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-start "" "%CHROME%" --no-proxy-server --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir=${profileDir} --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+start "" "%CHROME%" --no-proxy-server --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 --disable-blink-features=AutomationControlled --disable-infobars --force-webrtc-ip-handling-policy=disable-non-proxied-udp https://whoer.net
 exit /b 0
 `;
   }
@@ -166,7 +166,7 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-start /wait "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server=http://127.0.0.1:${localPort} --user-data-dir=${profileDir} --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+start /wait "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server=http://127.0.0.1:${localPort} --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 --disable-blink-features=AutomationControlled --disable-infobars --force-webrtc-ip-handling-policy=disable-non-proxied-udp https://whoer.net
 
 if defined TUNNEL_PID taskkill /f /pid %TUNNEL_PID% >nul 2>nul
 exit /b 0

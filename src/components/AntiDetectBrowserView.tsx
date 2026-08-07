@@ -74,8 +74,12 @@ exit /b 0
   const user = px.user || '';
   const pass = px.pass || '';
   const cleanPort = String(px.port).trim();
-  const isSocks = cleanPort === '49156' || (px.protocol && px.protocol.toUpperCase() === 'SOCKS5' && cleanPort !== '49155');
-  const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
+  
+  // IMPORTANTE: O nosso tunnel.js fala protocolo HTTP. 
+  // Se for proxy AdsPower (porta 49156 SOCKS5), forçamos o uso da porta HTTP (49155)
+  // pois a mesma conta AdsPower suporta ambos na mesma IP, e SOCKS5 trava no tunnel.js.
+  const isAdsPowerSocks = cleanPort === '49156';
+  const parsedPort = isAdsPowerSocks ? 49155 : (parseInt(cleanPort, 10) || 49155);
 
   const localPort = 40000 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 10000); // Porta determinística
   const engineDir = `C:\\OmniMedia\\Profiles\\${acc.id}_engine`;
@@ -84,11 +88,12 @@ exit /b 0
 const http = require('http');
 const net = require('net');
 const [,, lPort, tHost, tPort, user, pass] = process.argv;
-const auth = Buffer.from(user + ':' + pass).toString('base64');
+const hasAuth = user && user.trim().length > 0;
+const auth = hasAuth ? Buffer.from(user + ':' + pass).toString('base64') : '';
 console.log(process.pid);
 const server = http.createServer((req, res) => {
     const headers = Object.assign({}, req.headers);
-    if (auth.length > 2) headers['Proxy-Authorization'] = 'Basic ' + auth;
+    if (hasAuth) headers['Proxy-Authorization'] = 'Basic ' + auth;
     const options = {
         hostname: tHost,
         port: Number(tPort),
@@ -106,7 +111,7 @@ const server = http.createServer((req, res) => {
 server.on('connect', (req, clientSocket, head) => {
     const pSocket = net.connect(Number(tPort), tHost, () => {
         let connectStr = 'CONNECT ' + req.url + ' HTTP/1.1\\r\\nHost: ' + req.url + '\\r\\n';
-        if (auth.length > 2) connectStr += 'Proxy-Authorization: Basic ' + auth + '\\r\\n';
+        if (hasAuth) connectStr += 'Proxy-Authorization: Basic ' + auth + '\\r\\n';
         connectStr += '\\r\\n';
         pSocket.write(connectStr);
     });
@@ -118,8 +123,12 @@ server.on('connect', (req, clientSocket, head) => {
                 clientSocket.write('HTTP/1.1 200 Connection Established\\r\\n\\r\\n');
                 const hEnd = chunk.indexOf('\\r\\n\\r\\n');
                 if (hEnd !== -1 && chunk.length > hEnd + 4) clientSocket.write(chunk.slice(hEnd + 4));
-            } else clientSocket.write(chunk);
-        } else clientSocket.write(chunk);
+            } else {
+                clientSocket.write(chunk);
+            }
+        } else {
+            clientSocket.write(chunk);
+        }
     });
     clientSocket.on('data', (chunk) => { if (connected) pSocket.write(chunk); });
     pSocket.on('error', () => clientSocket.destroy());

@@ -34,13 +34,9 @@ interface AntiDetectBrowserViewProps {
   onUpdateAccounts: (updated: Account[]) => void;
 }
 
-// ─── Modal de Edição de Proxy (reutilizável internamente) ─────────────────────
-const SITE_URL_INNER = 'https://multimedia-saas-platform.vercel.app';
-
 // ─── Função standalone de geração do .bat (usada em múltiplos componentes) ────
 function buildBatScript(acc: Account, px: { host: string; port: string; user: string; pass: string; protocol: string }): string {
   const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
-  const extDir = `${profileDir}\\proxy_ext`;
   const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
   const cdpPort = tunnelPort + 1000;
 
@@ -51,11 +47,6 @@ function buildBatScript(acc: Account, px: { host: string; port: string; user: st
     return `@echo off
 chcp 65001 >nul
 title OmniMedia — ${acc.name} (${acc.country}) — IP Direto
-echo ============================================
-echo   Abrindo Chrome: ${acc.name}
-echo   Pais: ${acc.country} - SEM PROXY (IP real do computador)
-echo ============================================
-echo.
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
@@ -74,11 +65,8 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-start /wait "" "%CHROME%" --no-proxy-server --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
-
-echo.
-echo Chrome aberto com IP direto do computador (Sem Proxy)!
-timeout /t 3 >nul
+start "" "%CHROME%" --no-proxy-server --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir=${profileDir} --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+exit /b 0
 `;
   }
 
@@ -144,19 +132,13 @@ server.listen(lPort, '127.0.0.1');
   return `@echo off
 chcp 65001 >nul
 title OmniMedia — ${acc.name} (${acc.country})
-echo ============================================
-echo   Abrindo Chrome: ${acc.name}
-echo   Pais: ${acc.country} - Proxy: ${px.host}:${parsedPort}
-echo ============================================
-echo.
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
-
-:: Configura Local Proxy Engine
 if not exist "${engineDir}" mkdir "${engineDir}"
+
 powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${engineB64}')) | Set-Content -Path '${engineDir}\\tunnel.js' -Encoding Ascii" 2>nul
-echo Iniciando túnel de proxy local na porta ${localPort}...
+
 start /b node "${engineDir}\\tunnel.js" ${localPort} ${px.host} ${parsedPort} "${user}" "${pass}" > "${engineDir}\\pid.txt" 2>nul
 timeout /t 2 >nul
 set /p TUNNEL_PID=<"${engineDir}\\pid.txt"
@@ -175,23 +157,15 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-echo Conectando Chrome via Engine Local...
-start /wait "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://127.0.0.1:${localPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+start /wait "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server=http://127.0.0.1:${localPort} --user-data-dir=${profileDir} --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 
-:: Encerrando túnel
 if defined TUNNEL_PID taskkill /f /pid %TUNNEL_PID% >nul 2>nul
-echo.
-echo ============================================
-echo   Chrome fechado com sucesso!
-echo ============================================
-echo.
-timeout /t 3 >nul
-\`;cesso!
-echo ============================================
-echo.
-timeout /t 3 >nul
+exit /b 0
 `;
 }
+
+// ─── Modal de Edição de Proxy (reutilizável internamente) ─────────────────────
+const SITE_URL_INNER = 'https://multimedia-saas-platform.vercel.app';
 
 // ─── ... (O restante da implementação permanece igual) ─────────────────────
 
@@ -572,106 +546,13 @@ timeout /t 4 >nul
   };
 
   const generateMasterLauncher = (): string => {
-    const engineCode = `
-const http = require('http');
-const net = require('net');
-const [,, lPort, tHost, tPort, user, pass] = process.argv;
-const auth = Buffer.from(user + ':' + pass).toString('base64');
-const server = http.createServer((req, res) => {
-    const headers = Object.assign({}, req.headers);
-    if (auth.length > 2) headers['Proxy-Authorization'] = 'Basic ' + auth;
-    const options = { hostname: tHost, port: Number(tPort), path: req.url, method: req.method, headers: headers };
-    const proxyReq = http.request(options, (proxyRes) => { res.writeHead(proxyRes.statusCode, proxyRes.headers); proxyRes.pipe(res); });
-    proxyReq.on('error', (e) => res.end());
-    req.pipe(proxyReq);
-});
-server.on('connect', (req, clientSocket, head) => {
-    const pSocket = net.connect(Number(tPort), tHost, () => { 
-        let connectStr = 'CONNECT ' + req.url + ' HTTP/1.1\\r\\nHost: ' + req.url + '\\r\\n';
-        if (auth.length > 2) connectStr += 'Proxy-Authorization: Basic ' + auth + '\\r\\n';
-        connectStr += '\\r\\n';
-        pSocket.write(connectStr); 
-    });
-    let connected = false;
-    pSocket.on('data', (chunk) => {
-        if (!connected) {
-            if (chunk.toString().includes('200')) {
-                connected = true;
-                clientSocket.write('HTTP/1.1 200 Connection Established\\r\\n\\r\\n');
-                const hEnd = chunk.indexOf('\\r\\n\\r\\n');
-                if (hEnd !== -1 && chunk.length > hEnd + 4) clientSocket.write(chunk.slice(hEnd + 4));
-            } else clientSocket.write(chunk);
-        } else clientSocket.write(chunk);
-    });
-    clientSocket.on('data', (chunk) => { if (connected) pSocket.write(chunk); });
-    pSocket.on('error', () => clientSocket.destroy());
-    clientSocket.on('error', () => pSocket.destroy());
-});
-server.listen(lPort, '127.0.0.1');
-`;
-    const engineB64 = Buffer.from(engineCode).toString('base64');
-    
     const blocks = filteredAccounts.map((acc, i) => {
       const px = acc.proxy;
-      const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
-      const engineDir = `C:\\OmniMedia\\Profiles\\${acc.id}_engine`;
-      const localPort = 40000 + i;
-      const user = px.username || '';
-      const pass = px.password || '';
-      const hasProxy = !!(px.ip && px.port);
-      
-      if (!hasProxy) {
-        return `:: Conta ${i + 1}: ${acc.name}
-if not exist "${profileDir}" mkdir "${profileDir}"
-start "" "%CHROME%" --no-proxy-server --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync https://whoer.net
-timeout /t 1 >nul`;
-      }
-      
-      const engineSetup = `if not exist "${engineDir}" mkdir "${engineDir}"
-powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${engineB64}')) | Set-Content -Path '${engineDir}\\tunnel.js' -Encoding Ascii" 2>nul
-start /b node "${engineDir}\\tunnel.js" ${localPort} ${px.ip} ${px.port} "${user}" "${pass}" > "${engineDir}\\pid.txt" 2>nul
-timeout /t 1 >nul
-`;
-
-      const chromeLaunch = `start "" "%CHROME%" --proxy-server="http://127.0.0.1:${localPort}" --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync https://whoer.net`;
-
-      return `:: Conta ${i + 1}: ${acc.name}
-if not exist "${profileDir}" mkdir "${profileDir}"
-${engineSetup}
-${chromeLaunch}
-timeout /t 1 >nul`;
+      return buildBatScript(acc, { host: px.ip, port: String(px.port), user: px.username || '', pass: px.password || '', protocol: px.protocol } as any);
     });
-
-    return `@echo off
-chcp 65001 >nul
-
-if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
-where node >nul 2>nul
-if %errorlevel% NEQ 0 (
-  echo ERRO: Node.js nao encontrado! Instale o Node.js.
-  timeout /t 5 >nul
-  exit /b 1
-)
-
-set "CHROME="
-for %%P in (
-  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
-  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
-  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
-) do (
-  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
-)
-
-if not defined CHROME (
-  echo ERRO: Google Chrome nao encontrado!
-  timeout /t 5 >nul & exit /b 1
-)
-
-${blocks.join('\n\n')}
-`;
+    return blocks.join('\n\n');
   };
 
-  // ─── Download de um launcher individual ───────────────────────────────────
   const handleDownloadLauncher = (acc: Account) => {
     const script = generateWindowsLauncher(acc);
     const blob = new Blob(['\ufeff' + script], { type: 'text/plain;charset=utf-8' });
@@ -685,10 +566,8 @@ ${blocks.join('\n\n')}
     URL.revokeObjectURL(url);
   };
 
-  // ─── Simula abertura (já que não podemos controlar o PC do browser) ────────
   const handleLaunch = (acc: Account) => {
     setSessionStatuses((prev) => ({ ...prev, [acc.id]: 'LAUNCHING' }));
-    // Baixa o launcher e simula sessão ativa
     handleDownloadLauncher(acc);
     setTimeout(() => {
       setSessionStatuses((prev) => ({ ...prev, [acc.id]: 'ACTIVE' }));
@@ -709,8 +588,7 @@ ${blocks.join('\n\n')}
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    // Simula status
+    
     filteredAccounts.forEach((acc, i) => {
       setTimeout(() => {
         setSessionStatuses((prev) => ({ ...prev, [acc.id]: 'LAUNCHING' }));

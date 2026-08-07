@@ -74,42 +74,72 @@ if not defined CHROME (
   pause & exit /b 1
 )
 
-start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
+start /wait "" "%CHROME%" --no-proxy-server --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 
 echo.
-echo Chrome aberto com IP direto do computador!
+echo Chrome aberto com IP direto do computador (Sem Proxy)!
 timeout /t 3 >nul
 `;
   }
 
-  // Com proxy configurado — usa AdsPower Extension Engine
-  const hasAuth = !!(px.user && px.pass);
+  // Com proxy configurado — usa Proxy Local Engine via Node.js
+  const user = px.user || '';
+  const pass = px.pass || '';
   const cleanPort = String(px.port).trim();
   const isSocks = cleanPort === '49156' || (px.protocol && px.protocol.toUpperCase() === 'SOCKS5' && cleanPort !== '49155');
-  const proxyScheme = (cleanPort === '49155' || !isSocks) ? 'http' : 'socks5';
   const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
 
-  // Manifest V3 Chrome extension (Auth only)
-  const manifestObj = {
-    version: '1.0.0',
-    manifest_version: 3,
-    name: 'OmniMedia AdsPower Engine',
-    permissions: ['webRequest', 'webRequestAuthProvider'],
-    host_permissions: ['<all_urls>'],
-    background: { service_worker: 'background.js' }
-  };
-  const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
+  const localPort = 40000 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 10000); // Porta determinística
+  const engineDir = `C:\\OmniMedia\\Profiles\\${acc.id}_engine`;
 
-  const bgScript = `
-chrome.webRequest.onAuthRequired.addListener(
-  function(details, callback) {
-    callback({ authCredentials: { username: "${px.user || ''}", password: "${px.pass || ''}" } });
-  },
-  { urls: ["<all_urls>"] },
-  ["asyncBlocking"]
-);
+  const engineCode = `
+const http = require('http');
+const net = require('net');
+const [,, lPort, tHost, tPort, user, pass] = process.argv;
+const auth = Buffer.from(user + ':' + pass).toString('base64');
+console.log(process.pid);
+const server = http.createServer((req, res) => {
+    const headers = Object.assign({}, req.headers);
+    if (auth.length > 2) headers['Proxy-Authorization'] = 'Basic ' + auth;
+    const options = {
+        hostname: tHost,
+        port: Number(tPort),
+        path: req.url,
+        method: req.method,
+        headers: headers
+    };
+    const proxyReq = http.request(options, (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res);
+    });
+    proxyReq.on('error', (e) => res.end());
+    req.pipe(proxyReq);
+});
+server.on('connect', (req, clientSocket, head) => {
+    const pSocket = net.connect(Number(tPort), tHost, () => {
+        let connectStr = 'CONNECT ' + req.url + ' HTTP/1.1\\r\\nHost: ' + req.url + '\\r\\n';
+        if (auth.length > 2) connectStr += 'Proxy-Authorization: Basic ' + auth + '\\r\\n';
+        connectStr += '\\r\\n';
+        pSocket.write(connectStr);
+    });
+    let connected = false;
+    pSocket.on('data', (chunk) => {
+        if (!connected) {
+            if (chunk.toString().includes('200')) {
+                connected = true;
+                clientSocket.write('HTTP/1.1 200 Connection Established\\r\\n\\r\\n');
+                const hEnd = chunk.indexOf('\\r\\n\\r\\n');
+                if (hEnd !== -1 && chunk.length > hEnd + 4) clientSocket.write(chunk.slice(hEnd + 4));
+            } else clientSocket.write(chunk);
+        } else clientSocket.write(chunk);
+    });
+    clientSocket.on('data', (chunk) => { if (connected) pSocket.write(chunk); });
+    pSocket.on('error', () => clientSocket.destroy());
+    clientSocket.on('error', () => pSocket.destroy());
+});
+server.listen(lPort, '127.0.0.1');
 `;
-  const bgB64 = Buffer.from(bgScript).toString('base64');
+  const engineB64 = Buffer.from(engineCode).toString('base64');
 
   return `@echo off
 chcp 65001 >nul
@@ -122,13 +152,14 @@ echo.
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "${profileDir}" mkdir "${profileDir}"
-if not exist "${extDir}" mkdir "${extDir}"
 
-${hasAuth ? `
-:: Configura extensao de proxy estilo AdsPower no perfil do Chrome
-powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Set-Content -Path '${extDir}\\manifest.json' -Encoding Ascii" 2>nul
-powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Set-Content -Path '${extDir}\\background.js' -Encoding Ascii" 2>nul
-` : ''}
+:: Configura Local Proxy Engine
+if not exist "${engineDir}" mkdir "${engineDir}"
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${engineB64}')) | Set-Content -Path '${engineDir}\\tunnel.js' -Encoding Ascii" 2>nul
+echo Iniciando túnel de proxy local na porta ${localPort}...
+start /b node "${engineDir}\\tunnel.js" ${localPort} ${px.host} ${parsedPort} "${user}" "${pass}" > "${engineDir}\\pid.txt" 2>nul
+timeout /t 2 >nul
+set /p TUNNEL_PID=<"${engineDir}\\pid.txt"
 
 set "CHROME="
 for %%P in (
@@ -141,31 +172,33 @@ for %%P in (
 
 if not defined CHROME (
   echo ERRO: Google Chrome nao foi encontrado neste computador!
-  echo Por favor, instale o Chrome e tente novamente.
   pause & exit /b 1
 )
 
-echo Conectando Chrome via AdsPower Engine (${proxyScheme.toUpperCase()}://${px.host}:${parsedPort})...
-${hasAuth ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net` : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
+echo Conectando Chrome via Engine Local...
+start /wait "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="http://127.0.0.1:${localPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net
 
-
+:: Encerrando túnel
+if defined TUNNEL_PID taskkill /f /pid %TUNNEL_PID% >nul 2>nul
 echo.
 echo ============================================
-echo   Chrome iniciado com sucesso!
+echo   Chrome fechado com sucesso!
+echo ============================================
+echo.
+timeout /t 3 >nul
+\`;cesso!
 echo ============================================
 echo.
 timeout /t 3 >nul
 `;
 }
 
-
-
+// ─── ... (O restante da implementação permanece igual) ─────────────────────
 
 const EditProxyModal: React.FC<{
   account: Account;
   onClose: () => void;
   onSave: (ip: string, port: number, user: string, pass: string, protocol: string) => void;
-
 }> = ({ account, onClose, onSave }) => {
   const [quickPaste, setQuickPaste] = useState('');
   const [ip, setIp] = useState(account.proxy.ip);
@@ -342,15 +375,6 @@ const EditProxyModal: React.FC<{
           </div>
         )}
 
-        {protocol === 'SOCKS5' && user.trim() !== '' && (
-          <div className="bg-orange-500/20 border border-orange-500/50 rounded-xl p-3 text-xs text-orange-200">
-            <strong className="block text-orange-400 mb-1 flex items-center gap-1">⚠️ Limitação do Google Chrome (SOCKS5)</strong>
-            O Chrome <strong>não suporta proxy SOCKS5 com usuário e senha</strong>. 
-            Isso vai causar o erro <i>ERR_SOCKS_CONNECTION_FAILED</i>. <br/>
-            <strong>Solução:</strong> Volte o protocolo para <strong>HTTP</strong> e use a porta <strong>49155</strong>.
-          </div>
-        )}
-
         {/* Actions */}
         <div className="flex flex-col gap-2 pt-2 border-t border-[var(--border-color)]">
           <button onClick={handleSaveAndDownload} disabled={!isValid}
@@ -369,7 +393,7 @@ const EditProxyModal: React.FC<{
   );
 };
 
-type BrowserSessionStatus = 'IDLE' | 'LAUNCHING' | 'ACTIVE' | 'FAILED';
+// ─── ... (O restante da implementação, incluindo generateMasterLauncher, etc) ...
 
 export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
   accounts,
@@ -380,15 +404,15 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
     (a) => selectedCategory === 'ALL' || a.category === selectedCategory
   );
 
-  const [sessionStatuses, setSessionStatuses] = useState<Record<string, BrowserSessionStatus>>(
+  const [sessionStatuses, setSessionStatuses] = useState<Record<string, 'IDLE' | 'LAUNCHING' | 'ACTIVE' | 'FAILED'>>(
     Object.fromEntries(accounts.map((a) => [a.id, 'IDLE']))
   );
+  
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedScript, setExpandedScript] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'proxy' | 'profiles' | 'bulk' | 'tutorial'>('profiles');
   const [copiedScript, setCopiedScript] = useState(false);
 
-  // ─── Estado do Gerenciamento de Contas (embutido) ──────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [testingProxyId, setTestingProxyId] = useState<string | null>(null);
@@ -398,28 +422,19 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
   const [quickPasteAcc, setQuickPasteAcc] = useState('');
   const [proxyFieldsAcc, setProxyFieldsAcc] = useState({ ip: '', port: '', user: '', pass: '' });
 
-  // ─── Estado do Proxy Customizado ──────────────────────────────────────────
   const [proxyInput, setProxyInput] = useState('');
   const [proxyParsed, setProxyParsed] = useState<{
     host: string; port: string; user: string; pass: string; protocol: string; valid: boolean;
   } | null>(null);
   const [proxyAppliedTo, setProxyAppliedTo] = useState<string[]>([]);
 
-  // Detecta formato e extrai campos do proxy
   const parseProxy = (raw: string) => {
     const str = raw.trim();
     if (!str) { setProxyParsed(null); return; }
 
-    // Suporta os formatos mais comuns:
-    // host:port:user:pass
-    // host:port@user:pass
-    // user:pass@host:port
-    // socks5://user:pass@host:port
-    // http://host:port
     let host = '', port = '', user = '', pass = '', protocol = 'HTTP';
 
     try {
-      // Tenta URL completo primeiro
       if (str.includes('://')) {
         const u = new URL(str.includes('://') ? str : 'http://' + str);
         host = u.hostname;
@@ -428,19 +443,16 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
         pass = u.password;
         protocol = str.startsWith('socks5') ? 'SOCKS5' : str.startsWith('socks4') ? 'SOCKS4' : 'HTTP';
       } else if (str.includes('@')) {
-        // user:pass@host:port
         const [credentials, hostpart] = str.split('@');
         [user, pass] = credentials.split(':');
         [host, port] = hostpart.split(':');
       } else {
-        // host:port:user:pass (mais comum em listas de proxy)
         const parts = str.split(':');
         if (parts.length === 4) {
           [host, port, user, pass] = parts;
         } else if (parts.length === 2) {
           [host, port] = parts;
         } else if (parts.length === 3) {
-          // pode ser host:port:user sem pass
           [host, port, user] = parts;
         }
       }
@@ -452,72 +464,6 @@ export const AntiDetectBrowserView: React.FC<AntiDetectBrowserViewProps> = ({
     }
   };
 
-  // Gera .bat com AdsPower Engine para proxy customizado (sem Node, sem tunnel)
-  const generateAuthProxyLauncher = (): string => {
-    if (!proxyParsed?.valid) return '';
-    const { host, port, user, pass } = proxyParsed;
-    const profileDir = `C:\\OmniMedia\\CustomProxy`;
-    const extDir = `${profileDir}\\proxy_ext`;
-    const hasAuth = !!(user && pass);
-    const cleanPort = String(port).trim();
-    const isSocks = cleanPort === '49156';
-    const proxyScheme = cleanPort === '49155' ? 'http' : (isSocks ? 'socks5' : 'http');
-    const parsedPort = parseInt(cleanPort, 10) || 49155;
-
-    const manifestObj = {
-      version: '1.0.0', manifest_version: 2, name: 'OmniMedia AdsPower Engine',
-      permissions: ['proxy', 'tabs', 'unlimitedStorage', 'storage', '<all_urls>', 'webRequest', 'webRequestBlocking'],
-      background: { scripts: ['background.js'] }
-    };
-    const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
-    const bgScript = `
-chrome.webRequest.onAuthRequired.addListener(
-  function(details) { return { authCredentials: { username: "${user || ''}", password: "${pass || ''}" } }; },
-  { urls: ["<all_urls>"] }, ["blocking"]
-);
-var config = { mode: "fixed_servers", rules: { singleProxy: { scheme: "${proxyScheme}", host: "${host}", port: ${parsedPort} }, bypassList: ["<-loopback>"] } };
-chrome.proxy.settings.set({ value: config, scope: "regular" }, function() {});
-`;
-    const bgB64 = Buffer.from(bgScript).toString('base64');
-
-    return `@echo off
-chcp 65001 >nul
-title OmniMedia — Chrome com Proxy Customizado
-echo Proxy: ${proxyScheme.toUpperCase()}://${host}:${parsedPort}
-echo.
-
-if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
-if not exist "${profileDir}" mkdir "${profileDir}"
-if not exist "${extDir}" mkdir "${extDir}"
-
-${hasAuth ? `powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Out-File -FilePath '${extDir}\\manifest.json' -Encoding utf8" 2>nul
-powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Out-File -FilePath '${extDir}\\background.js' -Encoding utf8" 2>nul
-` : ''}
-
-set "CHROME="
-for %%P in (
-  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
-  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
-  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
-) do (
-  if exist "%%~P" if not defined CHROME set "CHROME=%%~P"
-)
-
-if not defined CHROME (
-  echo ERRO: Chrome nao encontrado!
-  pause & exit /b 1
-)
-
-${hasAuth
-  ? `start "" "%CHROME%" --disable-ipv6 --proxy-server="${proxyScheme}://${host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`
-  : `start "" "%CHROME%" --disable-ipv6 --proxy-server="${proxyScheme}://${host}:${parsedPort}" --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`}
-
-echo Chrome iniciado! Verifique o IP no whoer.net
-timeout /t 3 >nul
-`;
-  };
-
-  // ─── Lançador Permanente (Lê proxy de C:\OmniMedia\proxy_atual.txt ou pergunta) ──────
   const generateUniversalLauncher = (): string => {
     return `@echo off
 chcp 65001 >nul
@@ -525,7 +471,6 @@ title OmniMedia — Lancador Permanente (Anti-Detect Browser)
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
 if not exist "C:\\OmniMedia\\Profiles" mkdir "C:\\OmniMedia\\Profiles"
-
 
 set "CHROME="
 for %%P in (
@@ -602,13 +547,13 @@ if %errorlevel%==0 (
       start /b "" node "C:\\OmniMedia\\tunnel.js" 10899 "%PROXY_HOST%" "%PROXY_PORT%" "%PROXY_USER%" "%PROXY_PASS%" >nul 2>&1
       set "TUNNEL_READY=1"
       timeout /t 2 >nul
-      echo Tunnel SOCKS5 ativo na porta 10899!
+      echo Tunnel proxy ativo na porta 10899!
     )
   )
 )
 
 if "%TUNNEL_READY%"=="1" (
-  start "" "%CHROME%" --disable-ipv6 --proxy-server="socks5://127.0.0.1:10899" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --restore-last-session --no-first-run --no-default-browser-check --disable-sync https://whoer.net
+  start "" "%CHROME%" --disable-ipv6 --proxy-server="http://127.0.0.1:10899" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --restore-last-session --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else if defined PROXY_HOST (
   start "" "%CHROME%" --disable-ipv6 --proxy-server="http://%PROXY_HOST%:%PROXY_PORT%" --user-data-dir="C:\\OmniMedia\\Profiles\\Sessao_Atual" --restore-last-session --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 ) else (
@@ -621,62 +566,78 @@ timeout /t 4 >nul
 `;
   };
 
-  const activeCount = Object.values(sessionStatuses).filter((s) => s === 'ACTIVE').length;
-  const launchingCount = Object.values(sessionStatuses).filter((s) => s === 'LAUNCHING').length;
-
-  // ─── Gera o script .bat para Windows ──────────────────────────────────────
   const generateWindowsLauncher = (acc: Account, customProxy?: { host: string; port: string; user: string; pass: string; protocol: string }): string => {
     const px = customProxy || { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: acc.proxy.protocol };
-    return buildBatScript(acc, px);
+    return buildBatScript(acc, px as any);
   };
 
-
-  // ─── Script mestre (abre todos os Chromes de uma vez) ─────────────────────
   const generateMasterLauncher = (): string => {
-    const accounts_to_open = filteredAccounts.slice(0, 10);
-    const blocks = accounts_to_open.map((acc, i) => {
+    const engineCode = `
+const http = require('http');
+const net = require('net');
+const [,, lPort, tHost, tPort, user, pass] = process.argv;
+const auth = Buffer.from(user + ':' + pass).toString('base64');
+const server = http.createServer((req, res) => {
+    const headers = Object.assign({}, req.headers);
+    if (auth.length > 2) headers['Proxy-Authorization'] = 'Basic ' + auth;
+    const options = { hostname: tHost, port: Number(tPort), path: req.url, method: req.method, headers: headers };
+    const proxyReq = http.request(options, (proxyRes) => { res.writeHead(proxyRes.statusCode, proxyRes.headers); proxyRes.pipe(res); });
+    proxyReq.on('error', (e) => res.end());
+    req.pipe(proxyReq);
+});
+server.on('connect', (req, clientSocket, head) => {
+    const pSocket = net.connect(Number(tPort), tHost, () => { 
+        let connectStr = 'CONNECT ' + req.url + ' HTTP/1.1\\r\\nHost: ' + req.url + '\\r\\n';
+        if (auth.length > 2) connectStr += 'Proxy-Authorization: Basic ' + auth + '\\r\\n';
+        connectStr += '\\r\\n';
+        pSocket.write(connectStr); 
+    });
+    let connected = false;
+    pSocket.on('data', (chunk) => {
+        if (!connected) {
+            if (chunk.toString().includes('200')) {
+                connected = true;
+                clientSocket.write('HTTP/1.1 200 Connection Established\\r\\n\\r\\n');
+                const hEnd = chunk.indexOf('\\r\\n\\r\\n');
+                if (hEnd !== -1 && chunk.length > hEnd + 4) clientSocket.write(chunk.slice(hEnd + 4));
+            } else clientSocket.write(chunk);
+        } else clientSocket.write(chunk);
+    });
+    clientSocket.on('data', (chunk) => { if (connected) pSocket.write(chunk); });
+    pSocket.on('error', () => clientSocket.destroy());
+    clientSocket.on('error', () => pSocket.destroy());
+});
+server.listen(lPort, '127.0.0.1');
+`;
+    const engineB64 = Buffer.from(engineCode).toString('base64');
+    
+    const blocks = filteredAccounts.map((acc, i) => {
+      const px = acc.proxy;
       const profileDir = `C:\\OmniMedia\\Profiles\\${acc.id}`;
-      const extDir = `${profileDir}\\proxy_ext`;
-      const px = { host: acc.proxy.ip, port: String(acc.proxy.port), user: acc.proxy.username || '', pass: acc.proxy.password || '', protocol: acc.proxy.protocol || 'http' };
-      const tunnelPort = 10800 + (Math.abs(acc.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % 500);
-      const cdpPort = tunnelPort + 1000;
-      const cleanPort = String(px.port).trim();
-      const hasProxy = !!(px.host && px.host.trim() && px.host !== 'sem-proxy');
-
+      const engineDir = `C:\\OmniMedia\\Profiles\\${acc.id}_engine`;
+      const localPort = 40000 + i;
+      const user = px.username || '';
+      const pass = px.password || '';
+      const hasProxy = !!(px.ip && px.port);
+      
       if (!hasProxy) {
-        const chromeLaunch = `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
-        return `:: Conta ${i + 1}: ${acc.name} (IP Direto)
+        return `:: Conta ${i + 1}: ${acc.name}
 if not exist "${profileDir}" mkdir "${profileDir}"
-${chromeLaunch}
+start "" "%CHROME%" --no-proxy-server --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync https://whoer.net
 timeout /t 1 >nul`;
       }
+      
+      const engineSetup = `if not exist "${engineDir}" mkdir "${engineDir}"
+powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${engineB64}')) | Set-Content -Path '${engineDir}\\tunnel.js' -Encoding Ascii" 2>nul
+start /b node "${engineDir}\\tunnel.js" ${localPort} ${px.ip} ${px.port} "${user}" "${pass}" > "${engineDir}\\pid.txt" 2>nul
+timeout /t 1 >nul
+`;
 
-      const hasAuth = !!(px.user && px.pass);
-      const isSocks = cleanPort === '49156' || (px.protocol && px.protocol.toUpperCase() === 'SOCKS5' && cleanPort !== '49155');
-      const proxyScheme = (cleanPort === '49155' || !isSocks) ? 'http' : 'socks5';
-      const parsedPort = parseInt(cleanPort, 10) || (isSocks ? 49156 : 49155);
-
-      const manifestObj = {
-        version: '1.0.0', manifest_version: 3, name: 'OmniMedia AdsPower Engine',
-        permissions: ['webRequest', 'webRequestAuthProvider'],
-        host_permissions: ['<all_urls>'],
-        background: { service_worker: 'background.js' }
-      };
-      const manifestB64 = Buffer.from(JSON.stringify(manifestObj, null, 2)).toString('base64');
-      const bgScript = `chrome.webRequest.onAuthRequired.addListener(function(d, callback){callback({authCredentials:{username:"${px.user}",password:"${px.pass}"}});},{urls:["<all_urls>"]},["asyncBlocking"]);`;
-      const bgB64 = Buffer.from(bgScript).toString('base64');
-
-      const extSetup = hasAuth ? `if not exist "${extDir}" mkdir "${extDir}"
-powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${manifestB64}')) | Set-Content -Path '${extDir}\\manifest.json' -Encoding Ascii" 2>nul
-powershell -NoProfile -Command "[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${bgB64}')) | Set-Content -Path '${extDir}\\background.js' -Encoding Ascii" 2>nul` : '';
-
-      const chromeLaunch = hasAuth
-        ? `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --load-extension="${extDir}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`
-        : `start "" "%CHROME%" --disable-ipv6 --remote-debugging-port=${cdpPort} --proxy-server="${proxyScheme}://${px.host}:${parsedPort}" --user-data-dir="${profileDir}" --lang=${acc.languageCode.toLowerCase()} --restore-last-session --no-first-run --no-default-browser-check --disable-sync --window-size=1280,800 https://whoer.net`;
+      const chromeLaunch = `start "" "%CHROME%" --proxy-server="http://127.0.0.1:${localPort}" --user-data-dir="${profileDir}" --restore-last-session --no-first-run --no-default-browser-check --disable-sync https://whoer.net`;
 
       return `:: Conta ${i + 1}: ${acc.name}
 if not exist "${profileDir}" mkdir "${profileDir}"
-${extSetup}
+${engineSetup}
 ${chromeLaunch}
 timeout /t 1 >nul`;
     });
@@ -685,7 +646,6 @@ timeout /t 1 >nul`;
 chcp 65001 >nul
 
 if not exist "C:\\OmniMedia" mkdir "C:\\OmniMedia"
-powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://multimedia-saas-platform.vercel.app/tunnel.js' -OutFile 'C:\\OmniMedia\\tunnel.js'" 2>nul
 where node >nul 2>nul
 if %errorlevel% NEQ 0 (
   echo ERRO: Node.js nao encontrado! Instale o Node.js.
@@ -762,7 +722,7 @@ ${blocks.join('\n\n')}
   };
 
   const handleStopAll = () => {
-    setSessionStatuses(Object.fromEntries(accounts.map((a) => [a.id, 'IDLE' as BrowserSessionStatus])));
+    setSessionStatuses(Object.fromEntries(accounts.map((a) => [a.id, 'IDLE' as 'IDLE'])));
   };
 
   const handleCopy = (id: string, text: string) => {
@@ -783,6 +743,9 @@ if not exist "C:\\OmniMedia\\Launchers" mkdir "C:\\OmniMedia\\Launchers"
 echo Pronto! Agora baixe os launchers individuais e coloque em C:\\OmniMedia\\Launchers\\
 echo Dê duplo clique em qualquer .bat para abrir o Chrome com o proxy correto.
 pause`;
+
+  const activeCount = Object.values(sessionStatuses).filter((s) => s === 'ACTIVE').length;
+  const launchingCount = Object.values(sessionStatuses).filter((s) => s === 'LAUNCHING').length;
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-300">
@@ -812,6 +775,18 @@ pause`;
           >
             <Square className="w-3.5 h-3.5" />
             Resetar Status
+          </button>
+          <button
+            onClick={() => {
+              if (window.confirm("ATENÇÃO: Isso apagará TODOS os perfis e proxies salvos. Deseja continuar?")) {
+                localStorage.clear();
+                window.location.reload();
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-600/25 transition-all hover:scale-105"
+          >
+            <Monitor className="w-3.5 h-3.5" />
+            Zerar Tudo
           </button>
         </div>
       </div>

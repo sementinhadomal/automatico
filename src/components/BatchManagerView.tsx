@@ -15,6 +15,7 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
   const [globalCaption, setGlobalCaption] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [postsPerDay, setPostsPerDay] = useState(3);
+  const [durationMonths, setDurationMonths] = useState(1);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,8 +69,12 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
     // Shuffle uploaded urls to randomize video order
     const shuffledUrls = [...uploadedUrls].sort(() => Math.random() - 0.5);
 
-    for (let i = 0; i < shuffledUrls.length; i++) {
+    const totalDays = durationMonths * 30;
+    const totalSlots = totalDays * postsPerDay;
+    
+    for (let i = 0; i < totalSlots; i++) {
       const dayIndex = Math.floor(i / postsPerDay);
+      const postInDay = i % postsPerDay;
       
       const postDate = new Date(currentDate);
       postDate.setDate(postDate.getDate() + dayIndex);
@@ -78,9 +83,13 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
       const randomHour = 9 + Math.floor(Math.random() * 11);
       const randomMinute = Math.floor(Math.random() * 60);
       postDate.setHours(randomHour, randomMinute, 0, 0);
+      
+      // Re-use videos if there are more slots than videos
+      const videoUrl = shuffledUrls.length > 0 ? shuffledUrls[i % shuffledUrls.length] : '';
+      
       agenda.push({
         id: `post_${Date.now()}_${i}`,
-        url: shuffledUrls[i],
+        url: videoUrl,
         caption: globalCaption,
         scheduledFor: postDate.toISOString(),
         done: false
@@ -470,7 +479,7 @@ pause
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5">Posts por Dia</label>
               <input
@@ -481,6 +490,19 @@ pause
                 onChange={(e) => setPostsPerDay(Number(e.target.value))}
                 className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
               />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5">Duração do Lote</label>
+              <select
+                value={durationMonths}
+                onChange={(e) => setDurationMonths(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-indigo-500"
+              >
+                <option value={1}>1 Mês (30 dias)</option>
+                <option value={2}>2 Meses (60 dias)</option>
+                <option value={3}>3 Meses (90 dias)</option>
+                <option value={4}>4 Meses (120 dias)</option>
+              </select>
             </div>
             <div>
               <label className="text-xs font-bold text-[var(--text-secondary)] block mb-1.5">Data de Início</label>

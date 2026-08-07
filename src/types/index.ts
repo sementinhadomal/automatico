@@ -41,6 +41,7 @@ export interface Account {
   errorCount: number;
   notes: string;
   tags: string[];
+  adsPowerId?: string;
 }
 
 export type MediaType = 'IMAGE' | 'VIDEO' | 'AUDIO';

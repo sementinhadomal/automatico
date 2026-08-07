@@ -63,7 +63,9 @@ const path = require('path');
 
 const VIDS = ${JSON.stringify(uploadedUrls)};
 const CAPTION = ${JSON.stringify(globalCaption)};
-const CHROME_DEBUG_URL = 'http://127.0.0.1:49152';
+const baseSeed = Math.abs('${targetAccount.id}'.split('').reduce((a, b) => a + b.charCodeAt(0), 0));
+const CDP_PORT = (10800 + (baseSeed % 500)) + 1000;
+const CHROME_DEBUG_URL = 'http://127.0.0.1:' + CDP_PORT;
 
 async function downloadVideo(url, dest) {
   return new Promise((resolve, reject) => {

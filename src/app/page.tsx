@@ -22,6 +22,7 @@ import { ExecutionHistoryView } from '@/components/ExecutionHistoryView';
 import { ReportsView } from '@/components/ReportsView';
 import { SwaggerDocsView } from '@/components/SwaggerDocsView';
 import { SystemLogsQueueView } from '@/components/SystemLogsQueueView';
+import { BatchManagerView } from '@/components/BatchManagerView';
 import { AntiDetectBrowserView } from '@/components/AntiDetectBrowserView';
 import { AnalyticsDashboardView } from '@/components/AnalyticsDashboardView';
 import { MediaDownloaderView } from '@/components/MediaDownloaderView';
@@ -150,12 +151,10 @@ export default function Home() {
 
           {activeTab === 'video_lab_pro' && <VideoLabView />}
 
-          {activeTab === 'campaigns' && (
-            <CampaignsView
+          {activeTab === 'batches' && (
+            <BatchManagerView
               accounts={accounts}
-              mediaAssets={mediaAssets}
               selectedCategory={selectedCategory}
-              onScheduleGenerated={handleBatchScheduleGenerated}
             />
           )}
 

@@ -65,7 +65,10 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
     // Spread posts throughout the day (e.g. 9 AM to 8 PM = 11 hours)
     // 11 hours = 660 minutes.
     
-    for (let i = 0; i < uploadedUrls.length; i++) {
+    // Shuffle uploaded urls to randomize video order
+    const shuffledUrls = [...uploadedUrls].sort(() => Math.random() - 0.5);
+
+    for (let i = 0; i < shuffledUrls.length; i++) {
       const dayIndex = Math.floor(i / postsPerDay);
       const postInDay = i % postsPerDay;
       
@@ -76,10 +79,9 @@ export const BatchManagerView: React.FC<BatchManagerViewProps> = ({ accounts, se
       const randomHour = 9 + Math.floor(Math.random() * 11);
       const randomMinute = Math.floor(Math.random() * 60);
       postDate.setHours(randomHour, randomMinute, 0, 0);
-      
       agenda.push({
         id: `post_${Date.now()}_${i}`,
-        url: uploadedUrls[i],
+        url: shuffledUrls[i],
         caption: globalCaption,
         scheduledFor: postDate.toISOString(),
         done: false
